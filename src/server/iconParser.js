@@ -89,7 +89,6 @@ export class IconParser {
         }
 
         const ipaPath = path.join(ipaDir, ipaFile);
-        console.log(`[IconParser] 解析 IPA: ${ipaPath}`);
 
         try {
             // 打开 IPA (ZIP 格式)
@@ -127,7 +126,6 @@ export class IconParser {
                     try {
                         // 如果没有找到图标，直接返回 null
                         if (iconEntries.length === 0) {
-                            console.log('[IconParser] 未找到图标文件');
                             resolve(null);
                             return;
                         }
@@ -148,7 +146,6 @@ export class IconParser {
                             // 保存到缓存文件
                             const cachedIconPath = path.join(ipaDir, 'icon.png');
                             fs.writeFileSync(cachedIconPath, iconData);
-                            console.log(`[IconParser] 图标已缓存: ${cachedIconPath}`);
                             resolve(cachedIconPath);
                         } else {
                             resolve(null);

@@ -36,7 +36,7 @@ class ArtifactPortal {
         await this.loadBranches();
 
         // 根据设备类型设置默认折叠状态
-        this.applyDefaultCollapseByDevice();
+        this.setupPlatformDisplay();
 
         this.handleHashChange();
     }
@@ -333,10 +333,10 @@ class ArtifactPortal {
     }
 
     /**
-     * 根据设备类型设置默认显示
+     * 根据设备类型设置默认平台显示
      * 移动端显示平台切换标签，桌面端隐藏
      */
-    applyDefaultCollapseByDevice() {
+    setupPlatformDisplay() {
         const platform = this.detectPlatform();
         const isMobile = platform === 'ios' || platform === 'android';
 
@@ -363,6 +363,10 @@ class ArtifactPortal {
 
             // 更新移动端分支筛选器
             this.updateMobileBranchFilter();
+
+            // 重新渲染内容以匹配选中的平台
+            this.updateLatestPlatformVisibility();
+            this.renderVersionLists();
         } else {
             // 桌面端：隐藏平台切换标签
             if (this.els.latestPlatformTabs) {
@@ -372,13 +376,6 @@ class ArtifactPortal {
                 this.els.historyPlatformTabs.hidden = true;
             }
         }
-    }
-
-    /**
-     * 折叠指定平台（已废弃，保留用于兼容）
-     */
-    collapsePlatform(platform) {
-        // 不再需要折叠功能
     }
 
     /**
@@ -1331,13 +1328,11 @@ class ArtifactPortal {
     async updateAppIcon(build) {
         // 使用全局配置的图标
         if (this.config && this.config.appIcon) {
-            console.log('[AppIcon] 使用配置图标:', this.config.appIcon);
             this._setAppIconImage(this.config.appIcon);
             return;
         }
 
         // 默认 📦
-        console.log('[AppIcon] 使用默认 📦');
         this.els.appIcon.innerHTML = '📦';
     }
 
