@@ -272,6 +272,12 @@ sync_code() {
         "$SCRIPT_DIR/" \
         "$target:$remote_dir/"
     
+    # 同步 deploy.local（如果存在）
+    if [ -f "$SCRIPT_DIR/deploy.local" ]; then
+        log_info "同步 deploy.local 配置文件..."
+        rsync -avz "$SCRIPT_DIR/deploy.local" "$target:$remote_dir/deploy.local"
+    fi
+    
     log_success "代码同步完成"
 }
 
