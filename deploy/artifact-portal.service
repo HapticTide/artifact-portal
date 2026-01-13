@@ -1,0 +1,47 @@
+[Unit]
+Description=Artifact Portal - IPA/APK 构建分发服务
+Documentation=https://github.com/your-org/artifact-portal
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+
+# 工作目录
+WorkingDirectory=/opt/artifact-portal
+
+# 启动命令
+ExecStart=/usr/bin/node src/server/index.js
+
+# 重启策略
+Restart=on-failure
+RestartSec=5
+StartLimitInterval=60
+StartLimitBurst=3
+
+# 环境变量
+Environment=NODE_ENV=production
+Environment=PORT=8088
+
+# 如需从 .env 文件加载环境变量，取消下行注释
+# EnvironmentFile=/opt/artifact-portal/.env
+
+# 日志
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=artifact-portal
+
+# 安全限制
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+
+# 允许读取构建目录
+ReadOnlyPaths=/
+ReadWritePaths=/var/artifacts/builds
+ReadWritePaths=/opt/artifact-portal/sample/builds
+
+[Install]
+WantedBy=multi-user.target

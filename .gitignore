@@ -1,0 +1,42 @@
+# Dependencies
+node_modules/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Deployment config (contains sensitive info)
+deploy.local
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+server.log
+
+# Runtime
+.server.pid
+
+# SSL certificates (generated)
+ssl/
+*.crt
+*.key
+*.pem
+
+# OS
+.DS_Store
+Thumbs.db
+
+# 自定义应用图标（不提交到仓库，但部署时会同步）
+src/web/assets/app-icon.png
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Build artifacts (实际产物目录，不提交)
+# /var/artifacts/
+builds/

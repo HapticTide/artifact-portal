@@ -1,0 +1,45 @@
+# =====================================
+# Artifact Portal 本地部署配置
+# =====================================
+# 此文件包含敏感信息，不会上传到 Git
+# 复制 deploy.local.example 为 deploy.local 并修改
+# =====================================
+
+# 远程服务器配置
+DEPLOY_TARGET="user@192.168.1.100"     # SSH 目标 (用户名@IP)
+DEPLOY_DIR="\$HOME/artifact-portal"    # 远程部署目录
+
+# 构建产物目录（Fastlane 输出路径）
+BUILDS_DIR="/path/to/your/builds"
+
+# 应用配置
+APP_NAME="构建中心"                     # 页面标题
+APP_ICON="https://example.com/logo.png" # 应用图标 URL（可选，支持远程 URL）
+
+# 服务配置
+PORT=8088                               # 服务端口
+HOST="0.0.0.0"                          # 监听地址
+
+# 公网访问地址
+PUBLIC_BASE_URL="http://192.168.1.100:8088"
+
+# iOS plist 代理配置（推荐）
+# =====================================
+# 由于 iOS OTA 安装需要受信任的 HTTPS 证书来下载 manifest.plist，
+# 如果你没有正式的 SSL 证书，可以配置一个公网 plist 代理服务。
+# 代理服务接收参数并生成 manifest.plist，IPA 文件通过 PUBLIC_BASE_URL 下载。
+# 参数说明：
+#   host: 下载主机地址（从 PUBLIC_BASE_URL 提取）
+#   downloadPath: IPA 下载路径
+#   bundleId: 应用包名（从 Info.plist 解析）
+#   AppName: 应用名称（从 Info.plist 解析）
+#   logo: 安装时显示的图标 URL（可选）
+# =====================================
+# IOS_PLIST_PROXY_URL="https://your-proxy.example.com/plist"
+# IOS_PLIST_LOGO="https://your-cdn.com/logo.png"
+# IOS_DISPLAY_NAME="MyApp"
+
+# 构建清理策略
+MAX_BUILDS=50                           # 保留的最大构建数
+MAX_AGE_DAYS=30                         # 保留的最大天数
+DISK_THRESHOLD_GB=50                    # 磁盘使用告警阈值（GB）
