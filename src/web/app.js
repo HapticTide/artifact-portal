@@ -73,20 +73,20 @@ class ArtifactPortal {
             // iOS
             iosSection: document.getElementById('ios-section'),
             iosQr: document.getElementById('ios-qr'),
-            iosSize: document.getElementById('ios-size'),
             iosInstallBtn: document.getElementById('ios-install-btn'),
             iosCopyBtn: document.getElementById('ios-copy-btn'),
 
             // Android
             androidSection: document.getElementById('android-section'),
             androidQr: document.getElementById('android-qr'),
-            androidSize: document.getElementById('android-size'),
             androidDownloadBtn: document.getElementById('android-download-btn'),
             androidCopyBtn: document.getElementById('android-copy-btn'),
 
+            // 移动端全局平台切换
+            globalPlatformTabs: document.getElementById('global-platform-tabs'),
+
             // 所有构建
             history: document.getElementById('history'),
-            historyPlatformTabs: document.getElementById('history-platform-tabs'),
             iosBranchFilter: document.getElementById('ios-branch-filter'),
             androidBranchFilter: document.getElementById('android-branch-filter'),
             mobileBranchFilter: document.getElementById('mobile-branch-filter'),
@@ -106,9 +106,8 @@ class ArtifactPortal {
         this.iosBranch = '';
         this.androidBranch = '';
 
-        // 移动端当前选中的平台
-        this.mobileLatestPlatform = 'ios';
-        this.mobileHistoryPlatform = 'ios';
+        // 移动端当前选中的平台（全局）
+        this.mobilePlatform = 'ios';
     }
 
     /**
@@ -183,12 +182,12 @@ class ArtifactPortal {
             this.toggleStatsPanel();
         });
 
-        // 统计面板平台切换标签（移动端）
-        this.els.statsPlatformTabs?.querySelectorAll('.platform-tab').forEach(tab => {
+        // 移动端全局平台切换
+        this.els.globalPlatformTabs?.querySelectorAll('.platform-tab').forEach(tab => {
             tab.addEventListener('click', (e) => {
                 e.preventDefault();
                 window.getSelection()?.removeAllRanges();
-                this.switchStatsPlatform(tab.dataset.platform);
+                this.switchMobilePlatform(tab.dataset.platform);
             });
         });
 
@@ -203,14 +202,39 @@ class ArtifactPortal {
             this.copyToClipboard(this.els.androidCopyBtn.dataset.url);
         });
 
-        // 最新构建平台切换标签（移动端）
-        this.els.latestPlatformTabs?.querySelectorAll('.platform-tab').forEach(tab => {
-            tab.addEventListener('click', () => this.switchLatestPlatform(tab.dataset.platform));
+        // 二维码折叠（移动端 - 新结构）
+        document.querySelectorAll('.qr-toggle-btn[data-target]').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.preventDefault();
+                const targetId = btn.dataset.target;
+                const content = document.getElementById(targetId);
+                if (content) {
+                    content.classList.toggle('collapsed');
+                    btn.classList.toggle('expanded');
+                }
+            });
         });
 
-        // 所有构建平台切换标签（移动端）
-        this.els.historyPlatformTabs?.querySelectorAll('.platform-tab').forEach(tab => {
-            tab.addEventListener('click', () => this.switchHistoryPlatform(tab.dataset.platform));
+        // 兼容旧结构（桌面端使用）
+        document.querySelectorAll('.qr-collapsible .qr-toggle-btn').forEach(btn => {
+            if (!btn.dataset.target) {
+                btn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    const container = btn.closest('.qr-collapsible');
+                    container?.classList.toggle('collapsed');
+                });
+            }
+        });
+
+        // 桌面端复制链接按钮（二维码下方）
+        document.querySelectorAll('.desktop-copy-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const sourceId = btn.dataset.copyFrom;
+                const sourceBtn = document.getElementById(sourceId);
+                if (sourceBtn?.dataset.url) {
+                    this.copyToClipboard(sourceBtn.dataset.url);
+                }
+            });
         });
 
         // iOS 分支筛选（桌面端）
@@ -229,7 +253,7 @@ class ArtifactPortal {
         this.els.mobileBranchFilter?.addEventListener('change', () => {
             const branch = this.els.mobileBranchFilter.value;
             // 设置当前平台的分支
-            if (this.mobileHistoryPlatform === 'ios') {
+            if (this.mobilePlatform === 'ios') {
                 this.iosBranch = branch;
             } else {
                 this.androidBranch = branch;
@@ -259,36 +283,28 @@ class ArtifactPortal {
     }
 
     /**
-     * 切换最新构建平台（移动端）
+     * 切换移动端平台（全局切换）
+     * 同时影响：最新构建、所有构建、包体积统计
      */
-    switchLatestPlatform(platform) {
-        this.mobileLatestPlatform = platform;
+    switchMobilePlatform(platform) {
+        this.mobilePlatform = platform;
 
-        // 更新标签状态
-        this.els.latestPlatformTabs?.querySelectorAll('.platform-tab').forEach(tab => {
+        // 更新全局标签状态
+        this.els.globalPlatformTabs?.querySelectorAll('.platform-tab').forEach(tab => {
             tab.classList.toggle('active', tab.dataset.platform === platform);
         });
 
-        // 更新平台区域显示
+        // 更新最新构建区域显示
         this.updateLatestPlatformVisibility();
-    }
 
-    /**
-     * 切换所有构建平台（移动端）
-     */
-    switchHistoryPlatform(platform) {
-        this.mobileHistoryPlatform = platform;
-
-        // 更新标签状态
-        this.els.historyPlatformTabs?.querySelectorAll('.platform-tab').forEach(tab => {
-            tab.classList.toggle('active', tab.dataset.platform === platform);
-        });
-
-        // 更新移动端分支筛选器的分支列表
+        // 更新移动端分支筛选器
         this.updateMobileBranchFilter();
 
         // 重新渲染版本列表
         this.renderVersionLists();
+
+        // 更新包体积统计图表显示
+        this.updateStatsPlatformVisibility();
     }
 
     /**
@@ -300,8 +316,8 @@ class ArtifactPortal {
 
         if (isMobile) {
             // 移动端：根据选中的标签显示单个平台
-            const showIos = this.mobileLatestPlatform === 'ios';
-            const showAndroid = this.mobileLatestPlatform === 'android';
+            const showIos = this.mobilePlatform === 'ios';
+            const showAndroid = this.mobilePlatform === 'android';
 
             // 只有当数据可用时才显示
             if (this.latestByPlatform?.ios?.platforms?.ios?.available) {
@@ -315,13 +331,29 @@ class ArtifactPortal {
     }
 
     /**
+     * 更新包体积统计的平台可见性（移动端）
+     */
+    updateStatsPlatformVisibility() {
+        const platform = this.detectPlatform();
+        const isMobile = platform === 'ios' || platform === 'android';
+
+        if (isMobile) {
+            const statsCharts = document.getElementById('stats-charts');
+            if (statsCharts) {
+                statsCharts.classList.toggle('show-ios', this.mobilePlatform === 'ios');
+                statsCharts.classList.toggle('show-android', this.mobilePlatform === 'android');
+            }
+        }
+    }
+
+    /**
      * 更新移动端分支筛选器
      */
     updateMobileBranchFilter() {
         if (!this.els.mobileBranchFilter) return;
 
         // 根据当前平台切换分支列表
-        const sourceSelect = this.mobileHistoryPlatform === 'ios'
+        const sourceSelect = this.mobilePlatform === 'ios'
             ? this.els.iosBranchFilter
             : this.els.androidBranchFilter;
 
@@ -331,36 +363,29 @@ class ArtifactPortal {
         this.els.mobileBranchFilter.innerHTML = sourceSelect.innerHTML;
 
         // 设置当前选中值
-        const currentBranch = this.mobileHistoryPlatform === 'ios' ? this.iosBranch : this.androidBranch;
+        const currentBranch = this.mobilePlatform === 'ios' ? this.iosBranch : this.androidBranch;
         this.els.mobileBranchFilter.value = currentBranch;
     }
 
     /**
      * 根据设备类型设置默认平台显示
-     * 移动端显示平台切换标签，桌面端隐藏
+     * 移动端显示全局平台切换，桌面端隐藏
      */
     setupPlatformDisplay() {
         const platform = this.detectPlatform();
         const isMobile = platform === 'ios' || platform === 'android';
 
         if (isMobile) {
-            // 移动端：显示平台切换标签
-            if (this.els.latestPlatformTabs) {
-                this.els.latestPlatformTabs.hidden = false;
-            }
-            if (this.els.historyPlatformTabs) {
-                this.els.historyPlatformTabs.hidden = false;
+            // 移动端：显示全局平台切换
+            if (this.els.globalPlatformTabs) {
+                this.els.globalPlatformTabs.hidden = false;
             }
 
-            // 设置默认选中的平台
-            this.mobileLatestPlatform = platform;
-            this.mobileHistoryPlatform = platform;
+            // 设置默认选中的平台（根据设备类型）
+            this.mobilePlatform = platform;
 
             // 更新标签状态
-            this.els.latestPlatformTabs?.querySelectorAll('.platform-tab').forEach(tab => {
-                tab.classList.toggle('active', tab.dataset.platform === platform);
-            });
-            this.els.historyPlatformTabs?.querySelectorAll('.platform-tab').forEach(tab => {
+            this.els.globalPlatformTabs?.querySelectorAll('.platform-tab').forEach(tab => {
                 tab.classList.toggle('active', tab.dataset.platform === platform);
             });
 
@@ -370,13 +395,11 @@ class ArtifactPortal {
             // 重新渲染内容以匹配选中的平台
             this.updateLatestPlatformVisibility();
             this.renderVersionLists();
+            this.updateStatsPlatformVisibility();
         } else {
-            // 桌面端：隐藏平台切换标签
-            if (this.els.latestPlatformTabs) {
-                this.els.latestPlatformTabs.hidden = true;
-            }
-            if (this.els.historyPlatformTabs) {
-                this.els.historyPlatformTabs.hidden = true;
+            // 桌面端：隐藏全局平台切换
+            if (this.els.globalPlatformTabs) {
+                this.els.globalPlatformTabs.hidden = true;
             }
         }
     }
@@ -700,15 +723,20 @@ class ArtifactPortal {
         const iosAvailable = iosBuild?.platforms?.ios?.available;
         if (iosAvailable) {
             const ios = iosBuild.platforms.ios;
-            this.els.iosSize.textContent = ios.size || '';
 
-            // 更新 iOS 版本信息（含构建时间）
+            // 更新 iOS 版本信息（版本+体积同行，时间换行）
             const iosVersionEl = document.getElementById('ios-version-info');
             if (iosVersionEl) {
+                const size = ios.size || '';
                 iosVersionEl.innerHTML = `
-                    <span class="platform-version">${ios.version} (${ios.build})</span>
-                    <span class="platform-branch">${ios.branch || ''}</span>
-                    <span class="platform-time">${this.formatTime(iosBuild.time)}</span>
+                    <div class="version-item-info">
+                        <div class="version-item-header">
+                            <span class="version-item-version">${ios.version} (${ios.build})</span>
+                            ${size ? `<span class="version-item-size">${size}</span>` : ''}
+                        </div>
+                        <div class="version-item-time">${this.formatTime(iosBuild.time)}</div>
+                    </div>
+                    <span class="version-item-branch">${ios.branch || 'dev'}</span>
                 `;
             }
 
@@ -723,15 +751,20 @@ class ArtifactPortal {
         const androidAvailable = androidBuild?.platforms?.android?.available;
         if (androidAvailable) {
             const android = androidBuild.platforms.android;
-            this.els.androidSize.textContent = android.size || '';
 
-            // 更新 Android 版本信息（含构建时间）
+            // 更新 Android 版本信息（版本+体积同行，时间换行）
             const androidVersionEl = document.getElementById('android-version-info');
             if (androidVersionEl) {
+                const size = android.size || '';
                 androidVersionEl.innerHTML = `
-                    <span class="platform-version">${android.version} (${android.build})</span>
-                    <span class="platform-branch">${android.branch || ''}</span>
-                    <span class="platform-time">${this.formatTime(androidBuild.time)}</span>
+                    <div class="version-item-info">
+                        <div class="version-item-header">
+                            <span class="version-item-version">${android.version} (${android.build})</span>
+                            ${size ? `<span class="version-item-size">${size}</span>` : ''}
+                        </div>
+                        <div class="version-item-time">${this.formatTime(androidBuild.time)}</div>
+                    </div>
+                    <span class="version-item-branch">${android.branch || 'dev'}</span>
                 `;
             }
 
@@ -746,17 +779,17 @@ class ArtifactPortal {
         // 设置平台区域可见性
         if (isMobile) {
             // 移动端：根据选中的标签显示单个平台
-            const showIos = this.mobileLatestPlatform === 'ios' && iosAvailable;
-            const showAndroid = this.mobileLatestPlatform === 'android' && androidAvailable;
+            const showIos = this.mobilePlatform === 'ios' && iosAvailable;
+            const showAndroid = this.mobilePlatform === 'android' && androidAvailable;
 
             this.els.iosSection.hidden = !showIos;
             this.els.androidSection.hidden = !showAndroid;
 
             // 如果当前选中的平台不可用，切换到另一个平台
-            if (this.mobileLatestPlatform === 'ios' && !iosAvailable && androidAvailable) {
-                this.switchLatestPlatform('android');
-            } else if (this.mobileLatestPlatform === 'android' && !androidAvailable && iosAvailable) {
-                this.switchLatestPlatform('ios');
+            if (this.mobilePlatform === 'ios' && !iosAvailable && androidAvailable) {
+                this.switchMobilePlatform('android');
+            } else if (this.mobilePlatform === 'android' && !androidAvailable && iosAvailable) {
+                this.switchMobilePlatform('ios');
             }
         } else {
             // 桌面端：根据数据可用性显示
@@ -834,8 +867,8 @@ class ArtifactPortal {
 
         if (isMobile) {
             // 移动端：只显示当前选中平台的构建
-            const builds = this.mobileHistoryPlatform === 'ios' ? iosBuilds : androidBuilds;
-            this.renderSingleColumnList(builds, this.mobileHistoryPlatform);
+            const builds = this.mobilePlatform === 'ios' ? iosBuilds : androidBuilds;
+            this.renderSingleColumnList(builds, this.mobilePlatform);
         } else {
             // 桌面端：双列对齐显示
             // 获取所有日期（合并 iOS 和 Android）
@@ -1014,14 +1047,12 @@ class ArtifactPortal {
 
         item.innerHTML = `
             <div class="version-item-info">
-                <div class="version-item-version">
+                <div class="version-item-header">
                     ${isLatest ? '<span class="latest-badge">最新</span>' : ''}
-                    ${platformData.version} (${platformData.build})
-                </div>
-                <div class="version-item-meta">
-                    <span class="version-item-time">${buildTime}</span>
+                    <span class="version-item-version">${platformData.version} (${platformData.build})</span>
                     ${size ? `<span class="version-item-size">${size}</span>` : ''}
                 </div>
+                <div class="version-item-time">${buildTime}</div>
             </div>
             <span class="version-item-branch">${platformData.branch || 'dev'}</span>
         `;
@@ -1233,7 +1264,6 @@ class ArtifactPortal {
             content += `
                 <div class="platform-section">
                     <div class="platform-title">
-                        <span class="icon">🍎</span>
                         <span>iOS</span>
                     </div>
                     <div class="platform-info">
@@ -1260,7 +1290,6 @@ class ArtifactPortal {
             content += `
                 <div class="platform-section">
                     <div class="platform-title">
-                        <span class="icon">🤖</span>
                         <span>Android</span>
                     </div>
                     <div class="platform-info">
@@ -1467,22 +1496,6 @@ class ArtifactPortal {
             // 折叠面板
             this.els.statsPanel.classList.add('collapsed');
         }
-    }
-
-    /**
-     * 切换统计平台（移动端）
-     */
-    switchStatsPlatform(platform) {
-        this.mobileStatsPlatform = platform;
-
-        // 更新标签状态
-        this.els.statsPlatformTabs?.querySelectorAll('.platform-tab').forEach(tab => {
-            tab.classList.toggle('active', tab.dataset.platform === platform);
-        });
-
-        // 更新显示的图表
-        this.els.statsCharts?.classList.remove('show-ios', 'show-android');
-        this.els.statsCharts?.classList.add(`show-${platform}`);
     }
 
     /**

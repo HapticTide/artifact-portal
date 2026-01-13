@@ -526,19 +526,49 @@ class ArtifactManager {
     }
 
     /**
-     * 获取所有分支
+     * 获取所有分支（直接从文件系统读取目录）
      */
     async getBranches() {
-        await this._ensureCache();
+        const iosDir = join(this.buildsDir, 'iOS');
+        const androidDir = join(this.buildsDir, 'android');
 
-        const iosBranches = new Set(this._iosCache.map(b => b.branch));
-        const androidBranches = new Set(this._androidCache.map(b => b.branch));
+        // 直接读取文件系统中的分支目录
+        const iosDirs = await readDirSafe(iosDir);
+        const androidDirs = await readDirSafe(androidDir);
+
+        // 过滤出目录（排除文件）
+        const iosBranches = [];
+        for (const name of iosDirs) {
+            const fullPath = join(iosDir, name);
+            try {
+                const stat = fs.statSync(fullPath);
+                if (stat.isDirectory()) {
+                    iosBranches.push(name);
+                }
+            } catch {
+                // 忽略无法访问的目录
+            }
+        }
+
+        const androidBranches = [];
+        for (const name of androidDirs) {
+            const fullPath = join(androidDir, name);
+            try {
+                const stat = fs.statSync(fullPath);
+                if (stat.isDirectory()) {
+                    androidBranches.push(name);
+                }
+            } catch {
+                // 忽略无法访问的目录
+            }
+        }
+
         const allBranches = new Set([...iosBranches, ...androidBranches]);
 
         return {
             all: Array.from(allBranches).sort(),
-            ios: Array.from(iosBranches).sort(),
-            android: Array.from(androidBranches).sort(),
+            ios: iosBranches.sort(),
+            android: androidBranches.sort(),
         };
     }
 

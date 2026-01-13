@@ -46,77 +46,88 @@
             <p>还没有任何构建记录</p>
         </div>
 
+        <!-- 移动端全局平台切换（放在顶部，仅移动端显示） -->
+        <div id="global-platform-tabs" class="global-platform-tabs mobile-only" hidden>
+            <button class="platform-tab active" data-platform="ios">
+                <span class="tab-name">iOS</span>
+            </button>
+            <button class="platform-tab" data-platform="android">
+                <span class="tab-name">Android</span>
+            </button>
+        </div>
+
         <!-- 最新构建卡片 -->
         <section id="latest-build" class="card latest-card" hidden>
             <div class="card-header">
                 <h2 class="card-title">最新构建</h2>
-                <span id="latest-badge" class="badge">最新</span>
-            </div>
-
-            <!-- 移动端平台切换标签 -->
-            <div id="latest-platform-tabs" class="platform-tabs" hidden>
-                <button class="platform-tab active" data-platform="ios">
-                    <span class="tab-icon">🍎</span>
-                    <span class="tab-name">iOS</span>
-                </button>
-                <button class="platform-tab" data-platform="android">
-                    <span class="tab-icon">🤖</span>
-                    <span class="tab-name">Android</span>
-                </button>
             </div>
 
             <!-- 平台下载区 -->
             <div class="platforms">
                 <!-- iOS -->
                 <div id="ios-section" class="platform-section" hidden>
-                    <div class="platform-header" data-platform="ios">
-                        <span class="platform-icon">🍎</span>
+                    <!-- 平台标题（移动端隐藏，因为顶部已有切换） -->
+                    <div class="platform-header desktop-only" data-platform="ios">
                         <span class="platform-name">iOS</span>
-                        <span id="ios-size" class="platform-size"></span>
                     </div>
                     <div id="ios-version-info" class="platform-version-info">
-                        <!-- 由 JS 动态填充：版本、分支、时间 -->
+                        <!-- 由 JS 动态填充：与列表项布局一致 -->
                     </div>
                     <div class="platform-content">
-                        <div class="qr-container">
-                            <img id="ios-qr" class="qr-code" alt="iOS 安装二维码">
-                            <p class="qr-hint">扫码安装</p>
-                        </div>
                         <div class="platform-actions">
                             <button id="ios-install-btn" class="btn btn-primary">
-                                <span class="btn-icon">📲</span>
-                                安装 iOS 版
+                                点击安装
                             </button>
-                            <button id="ios-copy-btn" class="btn btn-secondary" data-url="">
-                                <span class="btn-icon">📋</span>
-                                复制链接
+                        </div>
+                        <!-- 次要操作行：扫码按钮 + 复制链接 -->
+                        <div class="platform-secondary-actions">
+                            <button class="qr-toggle-btn" data-target="ios-qr-content">
+                                <span>扫码安装</span>
+                                <span class="qr-toggle-icon">▼</span>
+                            </button>
+                            <button id="ios-copy-btn" class="btn-link" data-url="">
+                                复制安装链接
+                            </button>
+                        </div>
+                        <!-- 二维码内容（独立容器，展开收起不影响上方布局） -->
+                        <div id="ios-qr-content" class="qr-content collapsed">
+                            <img id="ios-qr" class="qr-code" alt="iOS 安装二维码">
+                            <button class="btn-link desktop-copy-btn" data-copy-from="ios-copy-btn">
+                                复制安装链接
                             </button>
                         </div>
                     </div>
                 </div>
                 <!-- Android -->
                 <div id="android-section" class="platform-section" hidden>
-                    <div class="platform-header" data-platform="android">
-                        <span class="platform-icon">🤖</span>
+                    <!-- 平台标题（移动端隐藏，因为顶部已有切换） -->
+                    <div class="platform-header desktop-only" data-platform="android">
                         <span class="platform-name">Android</span>
-                        <span id="android-size" class="platform-size"></span>
                     </div>
                     <div id="android-version-info" class="platform-version-info">
-                        <!-- 由 JS 动态填充：版本、分支、时间 -->
+                        <!-- 由 JS 动态填充：与列表项布局一致 -->
                     </div>
                     <div class="platform-content">
-                        <div class="qr-container">
-                            <img id="android-qr" class="qr-code" alt="Android 下载二维码">
-                            <p class="qr-hint">扫码下载</p>
-                        </div>
                         <div class="platform-actions">
                             <a id="android-download-btn" class="btn btn-primary" href="#" download>
-                                <span class="btn-icon">⬇️</span>
-                                下载 APK
+                                点击下载 APK
                             </a>
-                            <button id="android-copy-btn" class="btn btn-secondary" data-url="">
-                                <span class="btn-icon">📋</span>
-                                复制链接
+                        </div>
+                        <!-- 次要操作行：扫码按钮 + 复制链接 -->
+                        <div class="platform-secondary-actions">
+                            <button class="qr-toggle-btn" data-target="android-qr-content">
+                                <span>扫码下载</span>
+                                <span class="qr-toggle-icon">▼</span>
+                            </button>
+                            <button id="android-copy-btn" class="btn-link" data-url="">
+                                复制下载链接
+                            </button>
+                        </div>
+                        <!-- 二维码内容（独立容器，展开收起不影响上方布局） -->
+                        <div id="android-qr-content" class="qr-content collapsed">
+                            <img id="android-qr" class="qr-code" alt="Android 下载二维码">
+                            <button class="btn-link desktop-copy-btn" data-copy-from="android-copy-btn">
+                                复制下载链接
                             </button>
                         </div>
                     </div>
@@ -130,29 +141,15 @@
                 <h2 class="card-title">所有构建</h2>
             </div>
 
-            <!-- 移动端平台切换标签 -->
-            <div id="history-platform-tabs" class="platform-tabs" hidden>
-                <button class="platform-tab active" data-platform="ios">
-                    <span class="tab-icon">🍎</span>
-                    <span class="tab-name">iOS</span>
-                </button>
-                <button class="platform-tab" data-platform="android">
-                    <span class="tab-icon">🤖</span>
-                    <span class="tab-name">Android</span>
-                </button>
-            </div>
-
             <!-- 桌面端双列头（含分支筛选） -->
             <div class="all-versions-header desktop-only">
                 <div class="column-header-cell ios">
-                    <span class="column-icon">🍎</span>
                     <span class="column-title">iOS</span>
                     <select id="ios-branch-filter" class="branch-select-mini">
                         <option value="">全部分支</option>
                     </select>
                 </div>
                 <div class="column-header-cell android">
-                    <span class="column-icon">🤖</span>
                     <span class="column-title">Android</span>
                     <select id="android-branch-filter" class="branch-select-mini">
                         <option value="">全部分支</option>
@@ -188,32 +185,20 @@
         <section id="stats-panel" class="card stats-panel collapsed">
             <div class="stats-panel-header" id="stats-panel-toggle">
                 <div class="stats-panel-title">
-                    <span class="stats-icon">📊</span>
                     <span>包体积统计</span>
                 </div>
                 <span class="collapse-indicator">▼</span>
             </div>
             <div class="stats-panel-content">
-                <!-- 移动端平台切换 -->
-                <div id="stats-platform-tabs" class="platform-tabs" hidden>
-                    <button class="platform-tab active" data-platform="ios">
-                        <span class="tab-icon">🍎</span>
-                        <span class="tab-name">iOS</span>
-                    </button>
-                    <button class="platform-tab" data-platform="android">
-                        <span class="tab-icon">🤖</span>
-                        <span class="tab-name">Android</span>
-                    </button>
-                </div>
                 <!-- 图表区域 -->
                 <div id="stats-charts" class="stats-charts">
                     <div id="ios-chart-container" class="chart-container">
-                        <h3 class="chart-title">🍎 iOS 包体积趋势</h3>
+                        <h3 class="chart-title">iOS 包体积趋势</h3>
                         <canvas id="ios-size-chart"></canvas>
                         <div class="chart-summary" id="ios-chart-summary"></div>
                     </div>
                     <div id="android-chart-container" class="chart-container">
-                        <h3 class="chart-title">🤖 Android 包体积趋势</h3>
+                        <h3 class="chart-title">Android 包体积趋势</h3>
                         <canvas id="android-size-chart"></canvas>
                         <div class="chart-summary" id="android-chart-summary"></div>
                     </div>
