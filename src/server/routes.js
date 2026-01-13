@@ -23,15 +23,15 @@ const router = Router();
 
 /**
  * GET /api/builds - 获取构建列表
- * Query: limit, offset, branch, platform
+ * Query: days（每次加载天数）, skipDays（跳过天数）, branch, platform
  */
 router.get('/api/builds', async (req, res) => {
     try {
-        const { limit = '10', offset = '0', branch, platform } = req.query;
+        const { days = '3', skipDays = '0', branch, platform } = req.query;
 
         const result = await artifactManager.getBuilds({
-            limit: Math.min(parseInt(limit) || 10, 100),
-            offset: parseInt(offset) || 0,
+            days: Math.min(parseInt(days) || 3, 30),
+            skipDays: parseInt(skipDays) || 0,
             branch: branch || null,
             platform: platform || null,
         });

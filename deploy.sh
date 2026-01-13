@@ -120,8 +120,9 @@ confirm() {
     fi
     
     local answer
-    read -p "$(echo -e "${YELLOW}?${NC} $prompt (y/N): ")" answer
-    [[ "$answer" =~ ^[Yy]$ ]]
+    read -p "$(echo -e "${YELLOW}?${NC} $prompt (Y/n): ")" answer
+    # 空输入（回车）或 Y/y 都表示确认
+    [[ -z "$answer" ]] || [[ "$answer" =~ ^[Yy]$ ]]
 }
 
 # 配置 SSH 密钥

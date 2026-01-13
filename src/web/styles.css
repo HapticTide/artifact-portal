@@ -748,13 +748,11 @@ body {
     background-position: right 8px center;
 }
 
-/* 版本行容器（可滚动） */
+/* 版本行容器 */
 .version-rows {
     display: flex;
     flex-direction: column;
     gap: 0;
-    max-height: 500px;
-    overflow-y: auto;
 }
 
 /* 每个日期行（包含日期头 + 双列构建） */
@@ -1277,7 +1275,15 @@ body {
     border-radius: var(--radius-md);
 }
 
-.stats-panel-header:hover {
+/* 桌面端：hover 效果 */
+@media (hover: hover) and (pointer: fine) {
+    .stats-panel-header:hover {
+        background-color: var(--bg);
+    }
+}
+
+/* 移动端：仅在点击时显示效果 */
+.stats-panel-header:active {
     background-color: var(--bg);
 }
 

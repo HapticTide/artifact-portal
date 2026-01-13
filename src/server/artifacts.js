@@ -379,11 +379,16 @@ class ArtifactManager {
     }
 
     /**
-     * 获取构建列表（新版 API）
-     * 返回格式与前端兼容，但内部逻辑完全不同
+     * 获取构建列表（按天数分页）
+     * 返回格式与前端兼容，按日期分组加载
+     * @param {object} options - 查询选项
+     * @param {number} options.days - 每次加载的天数（默认 3 天）
+     * @param {number} options.skipDays - 跳过的天数（用于分页）
+     * @param {string} options.branch - 按分支过滤
+     * @param {string} options.platform - 按平台过滤（ios/android）
      */
     async getBuilds(options = {}) {
-        const { limit = 10, offset = 0, branch = null, platform = null } = options;
+        const { days = 3, skipDays = 0, branch = null, platform = null } = options;
 
         await this._ensureCache();
 
@@ -409,13 +414,36 @@ class ArtifactManager {
         // 按时间倒序排序
         allBuilds.sort((a, b) => new Date(b.time) - new Date(a.time));
 
-        const total = allBuilds.length;
-        const paged = allBuilds.slice(offset, offset + limit);
+        // 按日期分组（只考虑日期部分，忽略时间）
+        const buildsByDate = new Map();
+        for (const build of allBuilds) {
+            const dateKey = new Date(build.time).toISOString().split('T')[0]; // YYYY-MM-DD
+            if (!buildsByDate.has(dateKey)) {
+                buildsByDate.set(dateKey, []);
+            }
+            buildsByDate.get(dateKey).push(build);
+        }
+
+        // 获取所有有构建的日期，按时间倒序排列
+        const sortedDates = Array.from(buildsByDate.keys()).sort((a, b) => b.localeCompare(a));
+
+        // 跳过指定天数，获取接下来 days 天的构建
+        const targetDates = sortedDates.slice(skipDays, skipDays + days);
+        const resultBuilds = [];
+        for (const date of targetDates) {
+            resultBuilds.push(...buildsByDate.get(date));
+        }
+
+        // 计算总天数和是否还有更多
+        const totalDays = sortedDates.length;
+        const hasMore = skipDays + days < totalDays;
 
         return {
-            builds: paged,
-            total,
-            hasMore: offset + limit < total,
+            builds: resultBuilds,
+            total: allBuilds.length,
+            totalDays,
+            loadedDays: targetDates.length,
+            hasMore,
         };
     }
 

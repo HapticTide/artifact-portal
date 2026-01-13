@@ -7,8 +7,8 @@ class ArtifactPortal {
         // 状态
         this.builds = [];
         this.currentBuild = null;
-        this.offset = 0;
-        this.limit = 10;
+        this.skipDays = 0;  // 已跳过的天数（用于分页）
+        this.daysPerLoad = 3;  // 每次加载的天数
         this.branch = '';
         this.config = null;
 
@@ -242,6 +242,9 @@ class ArtifactPortal {
             this.hideSelectedDetail();
             window.location.hash = '';
         });
+
+        // 加载更多按钮
+        this.els.loadMore?.addEventListener('click', () => this.loadMoreBuilds());
 
         // 监听 hash 变化
         window.addEventListener('hashchange', () => this.handleHashChange());
@@ -485,7 +488,7 @@ class ArtifactPortal {
     }
 
     /**
-     * 加载构建列表
+     * 加载构建列表（按天数分页）
      * @param {boolean} append - 是否追加模式（加载更多）
      * @param {object} options - 可选的筛选参数
      * @param {string} options.platform - 平台筛选（ios/android）
@@ -497,7 +500,7 @@ class ArtifactPortal {
             this.els.latestBuild.hidden = true;
             this.els.history.hidden = true;
             this.els.emptyState.hidden = true;
-            this.offset = 0; // 重置偏移量
+            this.skipDays = 0; // 重置跳过天数
         }
 
         // 合并筛选参数
@@ -505,10 +508,10 @@ class ArtifactPortal {
         const branch = options.branch || this.branch;
 
         try {
-            // 并行加载最新构建和构建列表
+            // 构建请求参数（按天数分页）
             const params = new URLSearchParams({
-                limit: this.limit,
-                offset: this.offset,
+                days: this.daysPerLoad,
+                skipDays: this.skipDays,
             });
             if (branch) {
                 params.set('branch', branch);
@@ -536,13 +539,16 @@ class ArtifactPortal {
                 throw new Error(data.error);
             }
 
-            const { builds, total, hasMore } = data.data;
+            const { builds, total, hasMore, loadedDays } = data.data;
 
             if (append) {
                 this.builds = [...this.builds, ...builds];
             } else {
                 this.builds = builds;
             }
+
+            // 更新跳过天数，用于下次加载
+            this.skipDays += loadedDays;
 
             this.els.loading.hidden = true;
 
@@ -588,6 +594,24 @@ class ArtifactPortal {
             console.error('加载构建失败:', err);
             this.els.loading.hidden = true;
             this.els.emptyState.hidden = false;
+        }
+    }
+
+    /**
+     * 加载更多构建（按天数分页）
+     */
+    async loadMoreBuilds() {
+        // 禁用按钮防止重复点击
+        this.els.loadMore.disabled = true;
+        this.els.loadMore.textContent = '加载中...';
+
+        try {
+            // skipDays 已在 loadBuilds 中自动更新
+            await this.loadBuilds(true);
+        } finally {
+            // 恢复按钮状态
+            this.els.loadMore.disabled = false;
+            this.els.loadMore.textContent = '加载更多';
         }
     }
 
@@ -772,7 +796,13 @@ class ArtifactPortal {
      */
     renderHistory(builds, append = false) {
         // 保存构建数据用于筛选
-        this.allBuilds = builds;
+        if (append) {
+            // 追加模式：合并新数据
+            this.allBuilds = [...(this.allBuilds || []), ...builds];
+        } else {
+            // 重置模式
+            this.allBuilds = builds;
+        }
         this.renderVersionLists();
     }
 
