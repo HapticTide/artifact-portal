@@ -236,7 +236,7 @@ class BuildDatabase {
                 trend: builds.length >= 2 ? {
                     change: latest.size - oldest.size,
                     changeFormatted: formatSize(Math.abs(latest.size - oldest.size)),
-                    changePercent: ((latest.size - oldest.size) / oldest.size * 100).toFixed(1),
+                    changePercent: (Math.abs(latest.size - oldest.size) / oldest.size * 100).toFixed(1),
                     direction: latest.size > oldest.size ? 'increase' : (latest.size < oldest.size ? 'decrease' : 'stable'),
                 } : null,
             },
