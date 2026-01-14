@@ -87,6 +87,7 @@ class ArtifactPortal {
 
             // 所有构建
             history: document.getElementById('history'),
+            historyToggle: document.getElementById('history-toggle'),
             iosBranchFilter: document.getElementById('ios-branch-filter'),
             androidBranchFilter: document.getElementById('android-branch-filter'),
             mobileBranchFilter: document.getElementById('mobile-branch-filter'),
@@ -180,6 +181,13 @@ class ArtifactPortal {
             // 清除可能的文本选中
             window.getSelection()?.removeAllRanges();
             this.toggleStatsPanel();
+        });
+
+        // 移动端"所有构建"卡片折叠/展开
+        this.els.historyToggle?.addEventListener('click', (e) => {
+            e.preventDefault();
+            window.getSelection()?.removeAllRanges();
+            this.toggleHistoryPanel();
         });
 
         // 移动端全局平台切换
@@ -381,6 +389,11 @@ class ArtifactPortal {
                 this.els.globalPlatformTabs.hidden = false;
             }
 
+            // 移动端：默认收起"所有构建"卡片
+            if (this.els.history) {
+                this.els.history.classList.add('collapsed');
+            }
+
             // 设置默认选中的平台（根据设备类型）
             this.mobilePlatform = platform;
 
@@ -400,6 +413,11 @@ class ArtifactPortal {
             // 桌面端：隐藏全局平台切换
             if (this.els.globalPlatformTabs) {
                 this.els.globalPlatformTabs.hidden = true;
+            }
+
+            // 桌面端：确保"所有构建"卡片不收起
+            if (this.els.history) {
+                this.els.history.classList.remove('collapsed');
             }
         }
     }
@@ -1028,15 +1046,19 @@ class ArtifactPortal {
      */
     renderVersionItem(build, platform) {
         const platformData = build.platforms[platform];
+        const wrapper = document.createElement('div');
+        wrapper.className = 'version-item-wrapper';
+        wrapper.dataset.dir = build.dir;
+        wrapper.dataset.platform = platform;
+
         const item = document.createElement('div');
         item.className = 'version-item';
-        item.dataset.dir = build.dir;
-        item.dataset.platform = platform;
 
         // 检查是否是最新构建
         const isLatest = this.latestIds?.has(build.id);
         if (isLatest) {
             item.classList.add('latest');
+            wrapper.classList.add('latest');
         }
 
         // 格式化时间
@@ -1054,15 +1076,105 @@ class ArtifactPortal {
                 </div>
                 <div class="version-item-time">${buildTime}</div>
             </div>
-            <span class="version-item-branch">${platformData.branch || 'dev'}</span>
+            <div class="version-item-right">
+                <span class="version-item-branch">${platformData.branch || 'dev'}</span>
+                <span class="version-item-toggle">▼</span>
+            </div>
         `;
 
-        // 点击直接安装/下载
-        item.addEventListener('click', () => {
-            this.installOrDownload(build, platform);
+        wrapper.appendChild(item);
+
+        // 创建展开内容区域
+        const expandContent = this.createExpandContent(build, platform);
+        wrapper.appendChild(expandContent);
+
+        // 点击切换展开/收起
+        item.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.toggleVersionItemExpand(wrapper);
         });
 
-        return item;
+        return wrapper;
+    }
+
+    /**
+     * 创建展开内容区域
+     */
+    createExpandContent(build, platform) {
+        const platformData = build.platforms[platform];
+        const content = document.createElement('div');
+        content.className = 'version-item-expand';
+
+        // 生成对应平台的链接
+        let actionUrl = '';
+        let actionText = '';
+        let copyText = '';
+
+        if (platform === 'ios') {
+            actionUrl = this.getIosInstallUrl(platformData);
+            actionText = '点击安装';
+            copyText = '复制安装链接';
+        } else {
+            actionUrl = `${this.config.publicBaseUrl}/download/${platformData.apk}`;
+            actionText = '下载 APK';
+            copyText = '复制下载链接';
+        }
+
+        content.innerHTML = `
+            <div class="expand-qr">
+                <img class="expand-qr-img" src="/qr?text=${encodeURIComponent(actionUrl)}&size=160" alt="${platform === 'ios' ? 'iOS 安装' : 'Android 下载'}二维码">
+            </div>
+            <div class="expand-actions">
+                ${platform === 'ios'
+                ? `<button class="btn btn-primary expand-install-btn" data-url="${actionUrl}">${actionText}</button>`
+                : `<a href="${actionUrl}" class="btn btn-primary expand-download-btn" download>${actionText}</a>`
+            }
+                <button class="btn-link expand-copy-btn" data-url="${actionUrl}">${copyText}</button>
+            </div>
+        `;
+
+        // 绑定事件
+        const installBtn = content.querySelector('.expand-install-btn');
+        if (installBtn) {
+            installBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                window.location.href = installBtn.dataset.url;
+            });
+        }
+
+        const downloadBtn = content.querySelector('.expand-download-btn');
+        if (downloadBtn) {
+            downloadBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+            });
+        }
+
+        const copyBtn = content.querySelector('.expand-copy-btn');
+        if (copyBtn) {
+            copyBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.copyToClipboard(copyBtn.dataset.url);
+            });
+        }
+
+        return content;
+    }
+
+    /**
+     * 切换版本项展开/收起
+     */
+    toggleVersionItemExpand(wrapper) {
+        const isExpanded = wrapper.classList.contains('expanded');
+
+        // 收起其他已展开的项
+        document.querySelectorAll('.version-item-wrapper.expanded').forEach(item => {
+            if (item !== wrapper) {
+                item.classList.remove('expanded');
+            }
+        });
+
+        // 切换当前项
+        wrapper.classList.toggle('expanded', !isExpanded);
     }
 
     /**
@@ -1180,24 +1292,18 @@ class ArtifactPortal {
             // 显示指定构建详情
             const build = this.builds.find(b => b.id === buildId || b.dir === buildId);
 
+            // 获取指定的平台（如果有）
+            const focusPlatform = params.get('platform');
+
             if (build) {
                 // 更新版本列表选中状态
                 this.updateVersionListSelection(build.dir);
 
-                // 判断是否是最新构建
-                const isLatest = this.latestIds?.has(build.id);
-
-                if (isLatest) {
-                    // 最新构建：滚动到顶部的最新构建卡片，隐藏详情
-                    this.els.selectedDetail.hidden = true;
-                    window.scrollTo({ top: 0, behavior: 'smooth' });
-                } else {
-                    // 非最新构建：在列表下方显示详情卡片
-                    this.showSelectedDetail(build);
-                }
+                // 始终显示详情面板
+                this.showSelectedDetail(build, focusPlatform);
             } else {
                 // 构建不在列表中，需要单独加载
-                this.loadBuildDetail(buildId);
+                this.loadBuildDetail(buildId, focusPlatform);
             }
         } else if (platform || branch) {
             // 应用筛选（更新分支选择器）
@@ -1229,14 +1335,14 @@ class ArtifactPortal {
     /**
      * 加载单个构建详情
      */
-    async loadBuildDetail(buildDir) {
+    async loadBuildDetail(buildDir, focusPlatform = null) {
         try {
             const res = await fetch(`/api/builds/${buildDir}`);
             const data = await res.json();
 
             if (data.success) {
-                // 非最新构建，显示详情卡片
-                this.showSelectedDetail(data.data);
+                // 显示详情卡片
+                this.showSelectedDetail(data.data, focusPlatform);
             }
         } catch (err) {
             console.error('加载构建详情失败:', err);
@@ -1246,7 +1352,7 @@ class ArtifactPortal {
     /**
      * 显示选中版本的详情卡片
      */
-    showSelectedDetail(build) {
+    showSelectedDetail(build, focusPlatform = null) {
         if (!this.els.selectedDetail || !this.els.selectedDetailContent) return;
 
         // 更新列表选中状态
@@ -1257,54 +1363,77 @@ class ArtifactPortal {
 
         let content = '';
 
-        // iOS 部分
-        if (ios?.available) {
+        // iOS 部分（如果指定了 focusPlatform，只显示该平台）
+        if (ios?.available && (!focusPlatform || focusPlatform === 'ios')) {
             const installUrl = this.getIosInstallUrl(ios);
 
             content += `
-                <div class="platform-section">
-                    <div class="platform-title">
-                        <span>iOS</span>
+                <div class="detail-platform-section">
+                    <div class="detail-platform-header">
+                        <span class="detail-platform-name">iOS</span>
                     </div>
-                    <div class="platform-info">
-                        <span>版本：${ios.version} (${ios.build})</span>
-                        <span>分支：${ios.branch || '-'}</span>
-                        <span>大小：${ios.size || '-'}</span>
-                    </div>
-                    <div class="qr-container">
-                        <img class="qr-code" src="/qr?text=${encodeURIComponent(installUrl)}&size=180" alt="iOS QR">
-                        <div class="action-btns">
-                            <button class="action-btn secondary" onclick="navigator.clipboard.writeText('${installUrl}').then(() => window.app.showToast('已复制'))">
-                                复制链接
-                            </button>
+                    <div class="detail-platform-info">
+                        <div class="detail-info-row">
+                            <span class="detail-info-label">版本</span>
+                            <span class="detail-info-value">${ios.version} (${ios.build})</span>
                         </div>
+                        <div class="detail-info-row">
+                            <span class="detail-info-label">分支</span>
+                            <span class="detail-info-value">${ios.branch || '-'}</span>
+                        </div>
+                        <div class="detail-info-row">
+                            <span class="detail-info-label">大小</span>
+                            <span class="detail-info-value">${ios.size || '-'}</span>
+                        </div>
+                    </div>
+                    <div class="detail-qr-container">
+                        <img class="detail-qr-code" src="/qr?text=${encodeURIComponent(installUrl)}&size=200" alt="iOS 安装二维码">
+                    </div>
+                    <div class="detail-actions">
+                        <button class="btn btn-primary detail-install-btn" data-url="${installUrl}">
+                            点击安装
+                        </button>
+                        <button class="btn-link detail-copy-btn" data-url="${installUrl}">
+                            复制安装链接
+                        </button>
                     </div>
                 </div>
             `;
         }
 
         // Android 部分
-        if (android?.available) {
+        if (android?.available && (!focusPlatform || focusPlatform === 'android')) {
             const downloadUrl = `${this.config.publicBaseUrl}/download/${android.apk}`;
 
             content += `
-                <div class="platform-section">
-                    <div class="platform-title">
-                        <span>Android</span>
+                <div class="detail-platform-section">
+                    <div class="detail-platform-header">
+                        <span class="detail-platform-name">Android</span>
                     </div>
-                    <div class="platform-info">
-                        <span>版本：${android.version} (${android.build})</span>
-                        <span>分支：${android.branch || '-'}</span>
-                        <span>大小：${android.size || '-'}</span>
-                    </div>
-                    <div class="qr-container">
-                        <img class="qr-code" src="/qr?text=${encodeURIComponent(downloadUrl)}&size=180" alt="Android QR">
-                        <div class="action-btns">
-                            <a href="${downloadUrl}" class="action-btn primary" download>下载 APK</a>
-                            <button class="action-btn secondary" onclick="navigator.clipboard.writeText('${downloadUrl}').then(() => window.app.showToast('已复制'))">
-                                复制链接
-                            </button>
+                    <div class="detail-platform-info">
+                        <div class="detail-info-row">
+                            <span class="detail-info-label">版本</span>
+                            <span class="detail-info-value">${android.version} (${android.build})</span>
                         </div>
+                        <div class="detail-info-row">
+                            <span class="detail-info-label">分支</span>
+                            <span class="detail-info-value">${android.branch || '-'}</span>
+                        </div>
+                        <div class="detail-info-row">
+                            <span class="detail-info-label">大小</span>
+                            <span class="detail-info-value">${android.size || '-'}</span>
+                        </div>
+                    </div>
+                    <div class="detail-qr-container">
+                        <img class="detail-qr-code" src="/qr?text=${encodeURIComponent(downloadUrl)}&size=200" alt="Android 下载二维码">
+                    </div>
+                    <div class="detail-actions">
+                        <a href="${downloadUrl}" class="btn btn-primary detail-download-btn" download>
+                            下载 APK
+                        </a>
+                        <button class="btn-link detail-copy-btn" data-url="${downloadUrl}">
+                            复制下载链接
+                        </button>
                     </div>
                 </div>
             `;
@@ -1313,10 +1442,38 @@ class ArtifactPortal {
         this.els.selectedDetailContent.innerHTML = content;
         this.els.selectedDetail.hidden = false;
 
+        // 绑定详情面板内的事件
+        this.bindDetailEvents();
+
         // 滚动到详情卡片
         setTimeout(() => {
             this.els.selectedDetail.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }, 100);
+    }
+
+    /**
+     * 绑定详情面板内的按钮事件
+     */
+    bindDetailEvents() {
+        // iOS 安装按钮
+        this.els.selectedDetailContent.querySelectorAll('.detail-install-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const url = btn.dataset.url;
+                if (url) {
+                    window.location.href = url;
+                }
+            });
+        });
+
+        // 复制链接按钮
+        this.els.selectedDetailContent.querySelectorAll('.detail-copy-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const url = btn.dataset.url;
+                if (url) {
+                    this.copyToClipboard(url);
+                }
+            });
+        });
     }
 
     /**
@@ -1451,6 +1608,20 @@ class ArtifactPortal {
     // ========================================
     // 包体积统计功能
     // ========================================
+
+    /**
+     * 切换"所有构建"卡片展开/折叠（仅移动端）
+     */
+    toggleHistoryPanel() {
+        if (!this.els.history) return;
+
+        // 仅移动端有效
+        const platform = this.detectPlatform();
+        const isMobile = platform === 'ios' || platform === 'android';
+        if (!isMobile) return;
+
+        this.els.history.classList.toggle('collapsed');
+    }
 
     /**
      * 切换统计面板展开/折叠

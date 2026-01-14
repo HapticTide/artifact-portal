@@ -1072,6 +1072,48 @@ body {
     margin-bottom: var(--spacing-md);
 }
 
+/* 移动端可折叠卡片（所有构建） */
+.mobile-collapsed-card .card-header-toggle {
+    cursor: default;
+}
+
+.mobile-collapsed-card .card-header-toggle .collapse-indicator {
+    display: none;
+}
+
+.mobile-collapsed-card .card-collapsible-content {
+    display: block;
+}
+
+@media (max-width: 768px) {
+    .mobile-collapsed-card .card-header-toggle {
+        cursor: pointer;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        -webkit-tap-highlight-color: transparent;
+    }
+
+    .mobile-collapsed-card .card-header-toggle .collapse-indicator {
+        display: block;
+        font-size: 12px;
+        color: var(--subtitle);
+        transition: transform var(--transition);
+    }
+
+    .mobile-collapsed-card.collapsed .card-header-toggle .collapse-indicator {
+        transform: rotate(-90deg);
+    }
+
+    .mobile-collapsed-card.collapsed .card-header-toggle {
+        margin-bottom: 0;
+    }
+
+    .mobile-collapsed-card.collapsed .card-collapsible-content {
+        display: none;
+    }
+}
+
 /* 列头（双列） */
 .all-versions-header {
     display: grid;
@@ -1226,9 +1268,7 @@ body {
     background-color: rgba(250, 223, 75, 0.1);
 }
 
-.version-item.latest {
-    border-left: 3px solid var(--accent);
-}
+/* 注意: .version-item.latest 样式已移至 .version-item-wrapper.latest .version-item */
 
 .version-item-info {
     display: flex;
@@ -1282,6 +1322,109 @@ body {
     padding: 2px 6px;
     background: var(--card-bg);
     border-radius: 4px;
+}
+
+/* 版本项右侧区域（分支 + 箭头） */
+.version-item-right {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+}
+
+.version-item-toggle {
+    font-size: 10px;
+    color: var(--subtitle);
+    transition: transform var(--transition);
+}
+
+/* 版本项容器（包含主内容和展开区域） */
+.version-item-wrapper {
+    display: flex;
+    flex-direction: column;
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+}
+
+.version-item-wrapper.latest .version-item {
+    border-left: 3px solid var(--accent);
+}
+
+.version-item-wrapper .version-item {
+    border-radius: var(--radius-sm);
+}
+
+.version-item-wrapper.expanded .version-item {
+    border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+    border-bottom: none;
+}
+
+.version-item-wrapper.expanded .version-item-toggle {
+    transform: rotate(180deg);
+}
+
+/* 展开内容区域 */
+.version-item-expand {
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    padding: var(--spacing-md);
+    background-color: var(--bg);
+    border: 1px solid var(--border);
+    border-top: none;
+    border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+    gap: var(--spacing-md);
+}
+
+.version-item-wrapper.expanded .version-item-expand {
+    display: flex;
+}
+
+.version-item-wrapper.latest.expanded .version-item-expand {
+    border-left: 3px solid var(--accent);
+}
+
+/* 展开内容 - 二维码 */
+.expand-qr {
+    display: flex;
+    justify-content: center;
+}
+
+.expand-qr-img {
+    width: 160px;
+    height: 160px;
+    border-radius: var(--radius-sm);
+    background: #fff;
+}
+
+/* 展开内容 - 操作按钮 */
+.expand-actions {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--spacing-sm);
+    width: 100%;
+}
+
+.expand-actions .btn-primary {
+    width: 100%;
+    max-width: 200px;
+    padding: var(--spacing-xs) var(--spacing-md);
+    font-size: 13px;
+}
+
+/* 展开区域复制链接按钮颜色 */
+.expand-actions .btn-link {
+    font-size: 13px;
+}
+
+/* iOS 构建展开区域用蓝色 */
+.platform-cell.ios .expand-actions .btn-link {
+    color: #007AFF;
+}
+
+/* Android 构建展开区域用绿色 */
+.platform-cell.android .expand-actions .btn-link {
+    color: #2EBD68;
 }
 
 /* 最新构建标识 */
@@ -1462,6 +1605,82 @@ body {
     gap: var(--spacing-lg);
 }
 
+/* 新版详情面板样式 */
+.detail-platform-section {
+    padding: var(--spacing-lg);
+    background: var(--bg);
+    border-radius: var(--radius-md);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.detail-platform-header {
+    width: 100%;
+    margin-bottom: var(--spacing-md);
+}
+
+.detail-platform-name {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--title);
+}
+
+.detail-platform-info {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-xs);
+    margin-bottom: var(--spacing-lg);
+    padding: var(--spacing-sm);
+    background: var(--card-bg);
+    border-radius: var(--radius-sm);
+}
+
+.detail-info-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 13px;
+}
+
+.detail-info-label {
+    color: var(--subtitle);
+}
+
+.detail-info-value {
+    color: var(--text);
+    font-weight: 500;
+}
+
+.detail-qr-container {
+    margin-bottom: var(--spacing-lg);
+}
+
+.detail-qr-code {
+    width: 200px;
+    height: 200px;
+    border-radius: var(--radius-sm);
+    background: #fff;
+}
+
+.detail-actions {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-sm);
+    align-items: center;
+}
+
+.detail-actions .btn-primary {
+    width: 100%;
+    max-width: 280px;
+}
+
+.detail-actions .btn-link {
+    font-size: 13px;
+}
+
+/* 旧版样式保留（兼容） */
 .selected-detail-content .platform-section {
     padding: var(--spacing-md);
     background: var(--bg);

@@ -136,38 +136,42 @@
         </section>
 
         <!-- 所有构建 -->
-        <section id="history" class="card all-versions-card" hidden>
-            <div class="card-header">
+        <section id="history" class="card all-versions-card mobile-collapsed-card" hidden>
+            <div class="card-header card-header-toggle" id="history-toggle">
                 <h2 class="card-title">所有构建</h2>
+                <span class="collapse-indicator mobile-only">▼</span>
             </div>
+            <div class="card-collapsible-content">
 
-            <!-- 桌面端双列头（含分支筛选） -->
-            <div class="all-versions-header desktop-only">
-                <div class="column-header-cell ios">
-                    <span class="column-title">iOS</span>
-                    <select id="ios-branch-filter" class="branch-select-mini">
+                <!-- 桌面端双列头（含分支筛选） -->
+                <div class="all-versions-header desktop-only">
+                    <div class="column-header-cell ios">
+                        <span class="column-title">iOS</span>
+                        <select id="ios-branch-filter" class="branch-select-mini">
+                            <option value="">全部分支</option>
+                        </select>
+                    </div>
+                    <div class="column-header-cell android">
+                        <span class="column-title">Android</span>
+                        <select id="android-branch-filter" class="branch-select-mini">
+                            <option value="">全部分支</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- 移动端分支筛选（单独显示） -->
+                <div class="mobile-branch-filter mobile-only">
+                    <select id="mobile-branch-filter" class="branch-select">
                         <option value="">全部分支</option>
                     </select>
                 </div>
-                <div class="column-header-cell android">
-                    <span class="column-title">Android</span>
-                    <select id="android-branch-filter" class="branch-select-mini">
-                        <option value="">全部分支</option>
-                    </select>
-                </div>
-            </div>
 
-            <!-- 移动端分支筛选（单独显示） -->
-            <div class="mobile-branch-filter mobile-only">
-                <select id="mobile-branch-filter" class="branch-select">
-                    <option value="">全部分支</option>
-                </select>
-            </div>
+                <!-- 按日期分组的版本列表 -->
+                <div id="version-rows" class="version-rows"></div>
+                <!-- 加载更多按钮 -->
+                <button id="load-more" class="load-more-btn" hidden>加载更多</button>
 
-            <!-- 按日期分组的版本列表 -->
-            <div id="version-rows" class="version-rows"></div>
-            <!-- 加载更多按钮 -->
-            <button id="load-more" class="load-more-btn" hidden>加载更多</button>
+            </div><!-- .card-collapsible-content 结束 -->
         </section>
 
         <!-- 选中版本详情（非最新构建时显示） -->
