@@ -91,6 +91,10 @@ export const config = {
     // 构建目录
     buildsDir: process.env.BUILDS_DIR || './sample/builds',
 
+    // 上传配置
+    uploadToken: process.env.UPLOAD_TOKEN || '',
+    uploadMaxBytes: parseInt(process.env.UPLOAD_MAX_BYTES) || 2 * 1024 * 1024 * 1024,
+
     // iOS 配置（仅作为 fallback，优先从 IPA 文件名解析）
     iosBundleId: process.env.IOS_BUNDLE_ID || 'com.example.app',
     iosDisplayName: process.env.IOS_DISPLAY_NAME || 'MyApp',
