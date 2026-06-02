@@ -5,21 +5,255 @@
 
 import { Router } from 'express';
 import { join, dirname } from 'path';
-import { createReadStream } from 'fs';
-import { stat } from 'fs/promises';
+import { createReadStream, createWriteStream } from 'fs';
+import { mkdir, rename, rm, stat } from 'fs/promises';
+import { pipeline } from 'stream/promises';
 import config from './config.js';
 import artifactManager from './artifacts.js';
 import { iconParser } from './iconParser.js';
 import { generateManifest } from './manifest.js';
 import { generateQRCode, getQRCacheStats } from './utils/qrcode.js';
 import { isPathSafe, isExtensionAllowed } from './utils/fs.js';
+import {
+    buildAndroidUploadTarget,
+    buildIosUploadTarget,
+    validateAndroidUploadFile,
+    validateIosUploadFile,
+} from './upload.js';
 
 
 const router = Router();
 
+function isUploadAuthorized(req) {
+    if (!config.uploadToken) {
+        return false;
+    }
+
+    const authorization = req.get('authorization') || '';
+    const bearerToken = authorization.startsWith('Bearer ')
+        ? authorization.slice('Bearer '.length).trim()
+        : '';
+    const headerToken = req.get('x-upload-token') || '';
+
+    return bearerToken === config.uploadToken || headerToken === config.uploadToken;
+}
+
+async function writeRequestBodyToFile(req, targetPath) {
+    let receivedBytes = 0;
+    const output = createWriteStream(targetPath, { flags: 'wx' });
+
+    req.on('data', (chunk) => {
+        receivedBytes += chunk.length;
+        if (receivedBytes > config.uploadMaxBytes) {
+            req.destroy(new Error('上传文件超过大小限制'));
+        }
+    });
+
+    await pipeline(req, output);
+    return receivedBytes;
+}
+
 // ============================================
 // API 路由
 // ============================================
+
+/**
+ * POST /api/upload/ios - 上传 iOS IPA 文件
+ * Query: branch, version, filename
+ * Auth: Authorization: Bearer <UPLOAD_TOKEN>
+ */
+router.post('/api/upload/ios', async (req, res) => {
+    let tempPath = null;
+
+    try {
+        if (!config.uploadToken) {
+            return res.status(503).json({
+                success: false,
+                error: '上传功能未配置',
+            });
+        }
+
+        if (!isUploadAuthorized(req)) {
+            return res.status(401).json({
+                success: false,
+                error: '上传鉴权失败',
+            });
+        }
+
+        const { branch, version, filename } = req.query;
+        const uploadFilename = filename || req.get('x-artifact-filename');
+
+        if (!branch || !version || !uploadFilename) {
+            return res.status(400).json({
+                success: false,
+                error: '缺少 branch、version 或 filename 参数',
+            });
+        }
+
+        if (!validateIosUploadFile(uploadFilename)) {
+            return res.status(400).json({
+                success: false,
+                error: '只允许上传 .ipa 文件',
+            });
+        }
+
+        const contentLength = parseInt(req.get('content-length') || '0');
+        if (contentLength > config.uploadMaxBytes) {
+            return res.status(413).json({
+                success: false,
+                error: '上传文件超过大小限制',
+            });
+        }
+
+        const target = buildIosUploadTarget({
+            buildsDir: artifactManager.buildsDir,
+            branch,
+            version,
+            filename: uploadFilename,
+        });
+
+        const uploadTempDir = join(artifactManager.buildsDir, '.uploads');
+        await mkdir(uploadTempDir, { recursive: true });
+        await mkdir(target.directory, { recursive: true });
+
+        tempPath = join(uploadTempDir, `${Date.now()}-${process.pid}-${target.filename}.tmp`);
+        const size = await writeRequestBodyToFile(req, tempPath);
+        if (size <= 0) {
+            await rm(tempPath, { force: true });
+            tempPath = null;
+            return res.status(400).json({
+                success: false,
+                error: '上传文件为空',
+            });
+        }
+
+        await rename(tempPath, target.absolutePath);
+        tempPath = null;
+
+        artifactManager.invalidateCache();
+
+        res.json({
+            success: true,
+            data: {
+                platform: 'ios',
+                branch: target.branch,
+                version: target.version,
+                filename: target.filename,
+                size,
+                relativePath: target.relativePath,
+                downloadUrl: `${config.publicBaseUrl}/download/${target.relativePath}`,
+            },
+        });
+    } catch (err) {
+        if (tempPath) {
+            await rm(tempPath, { force: true }).catch(() => {});
+        }
+
+        console.error('上传 iOS 包失败:', err);
+        res.status(500).json({
+            success: false,
+            error: err.message || '上传失败',
+        });
+    }
+});
+
+/**
+ * POST /api/upload/android - 上传 Android APK 文件
+ * Query: branch, filename
+ * Auth: Authorization: Bearer <UPLOAD_TOKEN>
+ */
+router.post('/api/upload/android', async (req, res) => {
+    let tempPath = null;
+
+    try {
+        if (!config.uploadToken) {
+            return res.status(503).json({
+                success: false,
+                error: '上传功能未配置',
+            });
+        }
+
+        if (!isUploadAuthorized(req)) {
+            return res.status(401).json({
+                success: false,
+                error: '上传鉴权失败',
+            });
+        }
+
+        const { branch, filename } = req.query;
+        const uploadFilename = filename || req.get('x-artifact-filename');
+
+        if (!branch || !uploadFilename) {
+            return res.status(400).json({
+                success: false,
+                error: '缺少 branch 或 filename 参数',
+            });
+        }
+
+        if (!validateAndroidUploadFile(uploadFilename)) {
+            return res.status(400).json({
+                success: false,
+                error: '只允许上传 .apk 文件',
+            });
+        }
+
+        const contentLength = parseInt(req.get('content-length') || '0');
+        if (contentLength > config.uploadMaxBytes) {
+            return res.status(413).json({
+                success: false,
+                error: '上传文件超过大小限制',
+            });
+        }
+
+        const target = buildAndroidUploadTarget({
+            buildsDir: artifactManager.buildsDir,
+            branch,
+            filename: uploadFilename,
+        });
+
+        const uploadTempDir = join(artifactManager.buildsDir, '.uploads');
+        await mkdir(uploadTempDir, { recursive: true });
+        await mkdir(target.directory, { recursive: true });
+
+        tempPath = join(uploadTempDir, `${Date.now()}-${process.pid}-${target.filename}.tmp`);
+        const size = await writeRequestBodyToFile(req, tempPath);
+        if (size <= 0) {
+            await rm(tempPath, { force: true });
+            tempPath = null;
+            return res.status(400).json({
+                success: false,
+                error: '上传文件为空',
+            });
+        }
+
+        await rename(tempPath, target.absolutePath);
+        tempPath = null;
+
+        artifactManager.invalidateCache();
+
+        res.json({
+            success: true,
+            data: {
+                platform: 'android',
+                branch: target.branch,
+                filename: target.filename,
+                size,
+                relativePath: target.relativePath,
+                downloadUrl: `${config.publicBaseUrl}/download/${target.relativePath}`,
+            },
+        });
+    } catch (err) {
+        if (tempPath) {
+            await rm(tempPath, { force: true }).catch(() => {});
+        }
+
+        console.error('上传 Android 包失败:', err);
+        res.status(500).json({
+            success: false,
+            error: err.message || '上传失败',
+        });
+    }
+});
 
 /**
  * GET /api/builds - 获取构建列表

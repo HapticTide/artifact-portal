@@ -77,6 +77,8 @@ artifact-portal/
 | `IOS_PLIST_PROXY_URL` | - | iOS plist 代理服务 URL（见下文） |
 | `IOS_PLIST_LOGO` | - | iOS 安装时显示的图标 URL（用于 plist 代理） |
 | `IOS_DISPLAY_NAME` | - | iOS 应用显示名称（fallback，优先从 Info.plist 解析） |
+| `UPLOAD_TOKEN` | - | 上传接口鉴权 Token，未配置时禁用上传 |
+| `UPLOAD_MAX_BYTES` | `2147483648` | 上传文件大小限制，默认 2GB |
 | `MAX_BUILDS` | `50` | 保留的最大构建数 |
 | `MAX_AGE_DAYS` | `30` | 保留的最大天数 |
 | `DISK_THRESHOLD_GB` | `50` | 磁盘使用告警阈值 |
@@ -92,8 +94,28 @@ artifact-portal/
 | `GET /api/builds` | 获取构建列表 |
 | `GET /api/builds/latest` | 获取最新构建详情 |
 | `GET /api/health` | 健康检查 |
+| `POST /api/upload/ios` | 上传 iOS IPA 文件 |
+| `POST /api/upload/android` | 上传 Android APK 文件 |
 | `GET /qr?text=...` | 生成二维码 |
 | `GET /download/:dir/:file` | 下载构建文件 |
+
+### 上传 iOS IPA
+
+```bash
+curl -X POST \
+  -H "Authorization: Bearer $UPLOAD_TOKEN" \
+  --data-binary "@/path/to/IMWE-1.2.0(123).ipa" \
+  "http://127.0.0.1:8088/api/upload/ios?branch=origin/dev&version=1.2.0&filename=IMWE-1.2.0%28123%29.ipa"
+```
+
+### 上传 Android APK
+
+```bash
+curl -X POST \
+  -H "Authorization: Bearer $UPLOAD_TOKEN" \
+  --data-binary "@/path/to/IMWE_v1.2.0.123_06_02_10_30_online-release.apk" \
+  "http://127.0.0.1:8088/api/upload/android?branch=origin/dev&filename=IMWE_v1.2.0.123_06_02_10_30_online-release.apk"
+```
 
 ## 📱 iOS 安装说明
 
