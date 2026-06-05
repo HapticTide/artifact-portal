@@ -603,9 +603,55 @@ router.get('/download/*', async (req, res) => {
 
         res.setHeader('Content-Type', mimeTypes[ext] || 'application/octet-stream');
         res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+        res.setHeader('Accept-Ranges', 'bytes');
+
+        const range = req.headers.range;
+
+        if (range) {
+            const match = /^bytes=(\d*)-(\d*)$/.exec(range);
+            let start = match && match[1] ? parseInt(match[1], 10) : 0;
+            let end = match && match[2] ? parseInt(match[2], 10) : fileStats.size - 1;
+
+            // 支持 suffix range，例如 bytes=-1024，iOS 下载器可能会用这种形式探测文件尾部。
+            if (match && !match[1] && match[2]) {
+                const suffixLength = parseInt(match[2], 10);
+                start = Math.max(fileStats.size - suffixLength, 0);
+                end = fileStats.size - 1;
+            }
+
+            const hasStartOrEnd = Boolean(match && (match[1] || match[2]));
+
+            if (!match || !hasStartOrEnd || Number.isNaN(start) || Number.isNaN(end) || start > end || start >= fileStats.size) {
+                res.setHeader('Content-Range', `bytes */${fileStats.size}`);
+                return res.status(416).end();
+            }
+
+            end = Math.min(end, fileStats.size - 1);
+            const chunkSize = end - start + 1;
+
+            res.status(206);
+            res.setHeader('Content-Range', `bytes ${start}-${end}/${fileStats.size}`);
+            res.setHeader('Content-Length', chunkSize);
+
+            const stream = createReadStream(filePath, { start, end });
+            stream.pipe(res);
+
+            stream.on('error', (err) => {
+                console.error('文件读取错误:', err);
+                if (!res.headersSent) {
+                    res.status(500).json({
+                        success: false,
+                        error: '文件读取失败',
+                    });
+                }
+            });
+
+            return;
+        }
+
         res.setHeader('Content-Length', fileStats.size);
 
-        // 流式传输
+        // 流式传输完整文件
         const stream = createReadStream(filePath);
         stream.pipe(res);
 
