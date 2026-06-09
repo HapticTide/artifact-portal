@@ -215,21 +215,34 @@ sudo systemctl status artifact-portal
 
 ## 🧹 构建清理
 
-使用清理脚本定期删除旧构建：
+使用清理脚本定期删除旧构建。脚本支持当前上传目录结构：
+
+```text
+builds/ios/<branch>/<version>/*.ipa
+builds/android/<branch>/*.apk
+```
 
 ```bash
 # 模拟运行（不实际删除）
-DRY_RUN=true ./scripts/cleanup-builds.sh
+DRY_RUN=true MAX_BUILDS=10 MAX_AGE_DAYS=30 ./scripts/cleanup-builds.sh
 
 # 实际清理
-./scripts/cleanup-builds.sh
+DRY_RUN=false MAX_BUILDS=10 MAX_AGE_DAYS=30 ./scripts/cleanup-builds.sh
 ```
+
+清理规则：
+
+- `MAX_BUILDS`：每个平台、每个分支保留的最大包数量，默认 `50`
+- `MAX_PER_BRANCH`：与 `MAX_BUILDS` 等价，优先级更高
+- `MAX_AGE_DAYS`：超过指定天数的包会被删除，默认 `30`
+- `BUILDS_DIR`：构建目录，优先读取环境变量，其次读取 `.env`
+- `DRY_RUN=true`：只预览，不删除文件
 
 配置 cron 定时执行：
 
 ```bash
 # 每天凌晨 3 点执行清理
-0 3 * * * /opt/artifact-portal/scripts/cleanup-builds.sh >> /var/log/artifact-cleanup.log 2>&1
+0 3 * * * DRY_RUN=false MAX_BUILDS=10 MAX_AGE_DAYS=30 /opt/artifact-portal/scripts/cleanup-builds.sh >> /var/log/artifact-cleanup.log 2>&1
 ```
 
 ## 📝 构建目录结构
