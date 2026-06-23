@@ -27,13 +27,25 @@ app.use(express.json());
 // 静态文件（前端）
 app.use(express.static(join(__dirname, '../web')));
 
+// Tauri 桌面应用自动更新静态分发（仅当配置 UPDATER_DIR 时挂载，否则此路由不存在，对移动端门户零影响）：
+// 哑静态服务 latest.json + 版本化产物（.app.tar.gz/.sig/-setup.exe/.AppImage），供 tauri-plugin-updater 拉取。
+// 走在 SPA fallback 之前；完整性由客户端 minisign 验签兜底，本路由不鉴权、不改字节、不做业务语义。
+if (config.updaterDir) {
+    app.use('/updater', express.static(config.updaterDir));
+}
+
 // API 路由
 app.use(routes);
 
 // 前端路由 fallback（SPA）
 app.get('*', (req, res) => {
-    // 非 API 请求都返回 index.html
-    if (!req.path.startsWith('/api/') && !req.path.startsWith('/download/') && !req.path.startsWith('/qr')) {
+    // 非 API / 下载 / 二维码 / updater 静态请求都返回 index.html；其余未命中返回 404
+    if (
+        !req.path.startsWith('/api/') &&
+        !req.path.startsWith('/download/') &&
+        !req.path.startsWith('/qr') &&
+        !req.path.startsWith('/updater/')
+    ) {
         res.sendFile(join(__dirname, '../web/index.html'));
     } else {
         res.status(404).json({ success: false, error: 'Not Found' });

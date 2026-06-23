@@ -91,6 +91,9 @@ export const config = {
     // 构建目录
     buildsDir: process.env.BUILDS_DIR || './sample/builds',
 
+    // Tauri 桌面应用自动更新静态分发目录（仅当配置时挂载 /updater 路由；空 = 禁用，对移动端门户零影响）
+    updaterDir: process.env.UPDATER_DIR || '',
+
     // 上传配置
     uploadToken: process.env.UPLOAD_TOKEN || '',
     uploadMaxBytes: parseInt(process.env.UPLOAD_MAX_BYTES) || 2 * 1024 * 1024 * 1024,
