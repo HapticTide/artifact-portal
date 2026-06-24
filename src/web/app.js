@@ -101,6 +101,17 @@ class ArtifactPortal {
 
             // Toast
             toast: document.getElementById('toast'),
+
+            // E2EE Lab 桌面工具 入口 + 弹窗
+            labEntryBtn: document.getElementById('lab-entry-btn'),
+            labModal: document.getElementById('lab-modal'),
+            labModalClose: document.getElementById('lab-modal-close'),
+            labModalBackdrop: document.getElementById('lab-modal-backdrop'),
+            labDlMac: document.getElementById('lab-dl-mac'),
+            labDlWin: document.getElementById('lab-dl-win'),
+            labDlLinux: document.getElementById('lab-dl-linux'),
+            labVersion: document.getElementById('lab-version'),
+            labVersionWrap: document.getElementById('lab-version-wrap'),
         };
 
         // 分支筛选状态
@@ -169,11 +180,55 @@ class ArtifactPortal {
     }
 
     /**
+     * 打开 E2EE Lab 桌面工具弹窗
+     * 填三平台下载链接（指向 VPS /desktop 稳定名）+ 从自动更新清单动态取版本号
+     */
+    openLabModal() {
+        if (!this.els.labModal) return;
+
+        const base = (this.config?.publicBaseUrl || window.location.origin).replace(/\/$/, '');
+        if (this.els.labDlMac) this.els.labDlMac.href = `${base}/desktop/imwe-e2ee-lab-latest.dmg`;
+        if (this.els.labDlWin) this.els.labDlWin.href = `${base}/desktop/imwe-e2ee-lab-latest-setup.exe`;
+        if (this.els.labDlLinux) this.els.labDlLinux.href = `${base}/desktop/imwe-e2ee-lab-latest.AppImage`;
+
+        // 版本号从自动更新清单（/updater/latest.json）动态取，避免再多一处版本源；拉取失败则不显示。
+        // 用相对路径确保同源（publicBaseUrl 可能与页面 origin 不同，绝对 URL 会触发跨源 fetch 失败）。
+        fetch('/updater/latest.json', { cache: 'no-store' })
+            .then(r => r.ok ? r.json() : null)
+            .then(j => {
+                if (j?.version && this.els.labVersion && this.els.labVersionWrap) {
+                    this.els.labVersion.textContent = `v${j.version}`;
+                    this.els.labVersionWrap.hidden = false;
+                }
+            })
+            .catch(() => { });
+
+        this.els.labModal.hidden = false;
+    }
+
+    /**
+     * 关闭 E2EE Lab 桌面工具弹窗
+     */
+    closeLabModal() {
+        if (this.els.labModal) this.els.labModal.hidden = true;
+    }
+
+    /**
      * 绑定事件
      */
     bindEvents() {
         // 主题切换
         this.els.themeToggle.addEventListener('click', () => this.toggleTheme());
+
+        // E2EE Lab 桌面工具 入口弹窗
+        this.els.labEntryBtn?.addEventListener('click', () => this.openLabModal());
+        this.els.labModalClose?.addEventListener('click', () => this.closeLabModal());
+        this.els.labModalBackdrop?.addEventListener('click', () => this.closeLabModal());
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && this.els.labModal && !this.els.labModal.hidden) {
+                this.closeLabModal();
+            }
+        });
 
         // 统计面板折叠/展开
         this.els.statsPanelToggle?.addEventListener('click', (e) => {

@@ -94,6 +94,9 @@ export const config = {
     // Tauri 桌面应用自动更新静态分发目录（仅当配置时挂载 /updater 路由；空 = 禁用，对移动端门户零影响）
     updaterDir: process.env.UPDATER_DIR || '',
 
+    // 桌面应用安装包（dmg / setup.exe / AppImage）静态分发目录（仅当配置时挂载 /desktop 路由；空 = 禁用）
+    desktopDir: process.env.DESKTOP_DIR || '',
+
     // 上传配置
     uploadToken: process.env.UPLOAD_TOKEN || '',
     uploadMaxBytes: parseInt(process.env.UPLOAD_MAX_BYTES) || 2 * 1024 * 1024 * 1024,

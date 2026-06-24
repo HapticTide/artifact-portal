@@ -24,6 +24,10 @@
                 <h1 class="app-name">构建中心</h1>
             </div>
             <div class="header-actions">
+                <button id="lab-entry-btn" class="lab-entry-btn" title="IMWE E2EE Lab · 桌面工具">
+                    <span class="lab-entry-icon">🧪</span>
+                    <span class="lab-entry-text">E2EE Lab</span>
+                </button>
                 <button id="theme-toggle" class="theme-btn" title="切换主题">
                     <span class="theme-icon">🌙</span>
                 </button>
@@ -210,6 +214,54 @@
             </div>
         </section>
     </main>
+
+    <!-- E2EE Lab 桌面工具 入口弹窗 -->
+    <div id="lab-modal" class="lab-modal" hidden>
+        <div class="lab-modal-backdrop" id="lab-modal-backdrop"></div>
+        <div class="lab-modal-card" role="dialog" aria-modal="true" aria-labelledby="lab-modal-title">
+            <div class="lab-modal-header">
+                <div class="lab-modal-title-wrap">
+                    <span class="lab-modal-icon">🧪</span>
+                    <div>
+                        <div class="lab-modal-title-row">
+                            <span id="lab-modal-title" class="lab-modal-title">IMWE E2EE Lab</span>
+                            <span class="lab-modal-tag">桌面工具</span>
+                        </div>
+                        <div class="lab-modal-subtitle">端到端加密的 观测 · 互通测试 · 压测 工具</div>
+                    </div>
+                </div>
+                <button id="lab-modal-close" class="lab-modal-close" title="关闭" aria-label="关闭">✕</button>
+            </div>
+
+            <div class="lab-feature">
+                <div class="lab-feature-title">它能帮你</div>
+                <ul class="lab-feature-list">
+                    <li>看见加密怎么发生：可视化 3DH · 双棘轮 · 密钥字节</li>
+                    <li>跨端 E2E 互通自测：Rust ↔ 真机 iOS / Android 对端</li>
+                    <li>协议压测 / benchmark</li>
+                </ul>
+            </div>
+
+            <div class="lab-audience">面向 IMWE 协议 / 加密开发者 · QA · 安全研究</div>
+
+            <div class="lab-downloads">
+                <a class="lab-dl-btn" id="lab-dl-mac" href="#" download>
+                    <span class="lab-dl-os">macOS</span>
+                    <span class="lab-dl-sub">Apple Silicon</span>
+                </a>
+                <a class="lab-dl-btn" id="lab-dl-win" href="#" download>
+                    <span class="lab-dl-os">Windows</span>
+                    <span class="lab-dl-sub">setup.exe</span>
+                </a>
+                <a class="lab-dl-btn" id="lab-dl-linux" href="#" download>
+                    <span class="lab-dl-os">Linux</span>
+                    <span class="lab-dl-sub">AppImage</span>
+                </a>
+            </div>
+
+            <div class="lab-foot">内部工具 · 非公证（首次右键打开）<span id="lab-version-wrap" hidden> · 当前 <span id="lab-version"></span></span></div>
+        </div>
+    </div>
 
     <!-- 复制成功提示 -->
     <div id="toast" class="toast" hidden>

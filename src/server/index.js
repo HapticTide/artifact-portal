@@ -34,17 +34,23 @@ if (config.updaterDir) {
     app.use('/updater', express.static(config.updaterDir));
 }
 
+// 桌面应用安装包静态分发（仅当配置 DESKTOP_DIR 时挂载）：供前端「E2EE Lab」入口直链下载 dmg/exe/AppImage。
+if (config.desktopDir) {
+    app.use('/desktop', express.static(config.desktopDir));
+}
+
 // API 路由
 app.use(routes);
 
 // 前端路由 fallback（SPA）
 app.get('*', (req, res) => {
-    // 非 API / 下载 / 二维码 / updater 静态请求都返回 index.html；其余未命中返回 404
+    // 非 API / 下载 / 二维码 / updater / desktop 静态请求都返回 index.html；其余未命中返回 404
     if (
         !req.path.startsWith('/api/') &&
         !req.path.startsWith('/download/') &&
         !req.path.startsWith('/qr') &&
-        !req.path.startsWith('/updater/')
+        !req.path.startsWith('/updater/') &&
+        !req.path.startsWith('/desktop/')
     ) {
         res.sendFile(join(__dirname, '../web/index.html'));
     } else {
