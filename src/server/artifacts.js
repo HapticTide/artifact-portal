@@ -11,6 +11,8 @@
  *     android/
  *       {branch}/
  *         {AppName}_v{version}.{build}_{date}_{time}_online-release.apk
+ *         mapping/
+ *           {apk 文件名去掉 .apk}.mapping.txt (可选，混淆映射文件)
  * 
  * 特性：
  * - iOS 和 Android 独立管理，不强制关联
@@ -27,6 +29,7 @@ import config from './config.js';
 import buildDatabase from './database.js';
 import { readDirSafe, getFileSize, getDiskUsage } from './utils/fs.js';
 import { formatFileSize } from './utils/format.js';
+import { ANDROID_MAPPING_DIR, androidMappingCandidates } from './androidMapping.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -260,6 +263,38 @@ class ArtifactManager {
     }
 
     /**
+     * 查找 APK 对应的 mapping 文件
+     * @param {string} branch - 分支目录名
+     * @param {string} apkFile - APK 文件名
+     * @returns {{relativePath: string, size: number}|null}
+     */
+    _findAndroidMapping(branch, apkFile) {
+        let candidates;
+        try {
+            candidates = androidMappingCandidates(apkFile);
+        } catch {
+            return null;
+        }
+
+        for (const name of candidates) {
+            const fullPath = join(this.buildsDir, 'android', branch, ANDROID_MAPPING_DIR, name);
+            try {
+                const stat = fs.statSync(fullPath);
+                if (stat.isFile()) {
+                    return {
+                        relativePath: `android/${branch}/${ANDROID_MAPPING_DIR}/${name}`,
+                        size: stat.size,
+                    };
+                }
+            } catch {
+                // 文件不存在，尝试下一个候选扩展名
+            }
+        }
+
+        return null;
+    }
+
+    /**
      * 扫描 Android 构建
      * 目录结构：android/{branch}/xxx.apk
      * @returns {Promise<Array>}
@@ -292,6 +327,9 @@ class ArtifactManager {
                 const fileSize = fileStat.size;
                 const mtime = fileStat.mtime;
 
+                // 查找同名 mapping 文件（android/<branch>/mapping/<apkBase>.mapping.txt|zip）
+                const mapping = this._findAndroidMapping(branch, apkFile);
+
                 builds.push({
                     platform: 'android',
                     branch,
@@ -302,6 +340,9 @@ class ArtifactManager {
                     // 相对路径（用于下载 URL）
                     relativePath: `android/${branch}/${apkFile}`,
                     absolutePath: apkPath,
+                    // mapping 相对路径与体积（无 mapping 时为 null）
+                    mappingPath: mapping?.relativePath || null,
+                    mappingSize: mapping?.size ?? null,
                     size: fileSize,
                     // 优先使用从文件名解析的时间，否则用文件修改时间
                     time: parsed.time || mtime.toISOString(),
@@ -633,6 +674,9 @@ class ArtifactManager {
                     branch: android.branch,
                     packageName: config.androidPackageName || '',
                     apk: android.relativePath,
+                    // mapping 下载路径（无 mapping 时为 null）
+                    mapping: android.mappingPath || null,
+                    mappingSize: android.mappingSize != null ? formatFileSize(android.mappingSize) : null,
                     size: formatFileSize(android.size),
                     sizeBytes: android.size,
                 },

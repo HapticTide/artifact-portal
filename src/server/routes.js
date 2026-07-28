@@ -15,8 +15,10 @@ import { generateManifest } from './manifest.js';
 import { generateQRCode, getQRCacheStats } from './utils/qrcode.js';
 import { isPathSafe, isExtensionAllowed } from './utils/fs.js';
 import {
+    buildAndroidMappingUploadTarget,
     buildAndroidUploadTarget,
     buildIosUploadTarget,
+    validateAndroidMappingUploadFile,
     validateAndroidUploadFile,
     validateIosUploadFile,
 } from './upload.js';
@@ -248,6 +250,134 @@ router.post('/api/upload/android', async (req, res) => {
         }
 
         console.error('上传 Android 包失败:', err);
+        res.status(500).json({
+            success: false,
+            error: err.message || '上传失败',
+        });
+    }
+});
+
+/**
+ * POST /api/upload/android/mapping - 上传 Android mapping（混淆映射）文件
+ * Query: branch, apk（对应的 APK 文件名）, filename（可选，仅支持 .txt，默认 mapping.txt）
+ * Auth: Authorization: Bearer <UPLOAD_TOKEN>
+ *
+ * 存储路径：android/<branch>/mapping/<apk 文件名去掉 .apk>.mapping.<txt|zip>
+ * 必须先上传对应的 APK，否则返回 404。
+ */
+router.post('/api/upload/android/mapping', async (req, res) => {
+    let tempPath = null;
+
+    try {
+        if (!config.uploadToken) {
+            return res.status(503).json({
+                success: false,
+                error: '上传功能未配置',
+            });
+        }
+
+        if (!isUploadAuthorized(req)) {
+            return res.status(401).json({
+                success: false,
+                error: '上传鉴权失败',
+            });
+        }
+
+        const { branch, apk } = req.query;
+        const apkFilename = apk || req.get('x-artifact-apk');
+        const uploadFilename = req.query.filename || req.get('x-artifact-filename') || 'mapping.txt';
+
+        if (!branch || !apkFilename) {
+            return res.status(400).json({
+                success: false,
+                error: '缺少 branch 或 apk 参数',
+            });
+        }
+
+        if (!validateAndroidUploadFile(apkFilename)) {
+            return res.status(400).json({
+                success: false,
+                error: 'apk 参数必须是合法的 .apk 文件名',
+            });
+        }
+
+        if (!validateAndroidMappingUploadFile(uploadFilename)) {
+            return res.status(400).json({
+                success: false,
+                error: 'mapping 文件只允许 .txt 格式',
+            });
+        }
+
+        const contentLength = parseInt(req.get('content-length') || '0');
+        if (contentLength > config.uploadMaxBytes) {
+            return res.status(413).json({
+                success: false,
+                error: '上传文件超过大小限制',
+            });
+        }
+
+        const target = buildAndroidMappingUploadTarget({
+            buildsDir: artifactManager.buildsDir,
+            branch,
+            apkFilename,
+            filename: uploadFilename,
+        });
+
+        // mapping 与 APK 一一对应，APK 不存在时拒绝，避免产生孤立文件
+        const apkAbsolutePath = join(artifactManager.buildsDir, target.apkRelativePath);
+        try {
+            const apkStat = await stat(apkAbsolutePath);
+            if (!apkStat.isFile()) {
+                throw new Error('Not a file');
+            }
+        } catch {
+            // 完整存储路径只打服务端日志，响应体使用通用文案，避免泄漏文件系统布局
+            console.warn(`mapping 上传失败：对应 APK 不存在 ${target.apkRelativePath}`);
+            return res.status(404).json({
+                success: false,
+                error: '对应的 APK 不存在，请先上传 APK',
+            });
+        }
+
+        const uploadTempDir = join(artifactManager.buildsDir, '.uploads');
+        await mkdir(uploadTempDir, { recursive: true });
+        await mkdir(target.directory, { recursive: true });
+
+        tempPath = join(uploadTempDir, `${Date.now()}-${process.pid}-${target.filename}.tmp`);
+        const size = await writeRequestBodyToFile(req, tempPath);
+        if (size <= 0) {
+            await rm(tempPath, { force: true });
+            tempPath = null;
+            return res.status(400).json({
+                success: false,
+                error: '上传文件为空',
+            });
+        }
+
+        await rename(tempPath, target.absolutePath);
+        tempPath = null;
+
+        artifactManager.invalidateCache();
+
+        res.json({
+            success: true,
+            data: {
+                platform: 'android',
+                type: 'mapping',
+                branch: target.branch,
+                apk: target.apkFilename,
+                filename: target.filename,
+                size,
+                relativePath: target.relativePath,
+                downloadUrl: `${config.publicBaseUrl}/download/${target.relativePath}`,
+            },
+        });
+    } catch (err) {
+        if (tempPath) {
+            await rm(tempPath, { force: true }).catch(() => {});
+        }
+
+        console.error('上传 Android mapping 失败:', err);
         res.status(500).json({
             success: false,
             error: err.message || '上传失败',

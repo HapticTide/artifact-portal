@@ -80,6 +80,7 @@ class ArtifactPortal {
             androidSection: document.getElementById('android-section'),
             androidQr: document.getElementById('android-qr'),
             androidDownloadBtn: document.getElementById('android-download-btn'),
+            androidMappingBtn: document.getElementById('android-mapping-btn'),
             androidCopyBtn: document.getElementById('android-copy-btn'),
 
             // 移动端全局平台切换
@@ -584,6 +585,16 @@ class ArtifactPortal {
     }
 
     /**
+     * 获取 Android mapping 文件下载链接
+     * @param {object} android - Android 平台数据
+     * @returns {string|null} 没有 mapping 时返回 null
+     */
+    getMappingUrl(android) {
+        if (!android?.mapping) return null;
+        return `${this.config.publicBaseUrl}/download/${android.mapping}`;
+    }
+
+    /**
      * 加载构建列表（按天数分页）
      * @param {boolean} append - 是否追加模式（加载更多）
      * @param {object} options - 可选的筛选参数
@@ -847,6 +858,21 @@ class ArtifactPortal {
             this.els.androidQr.src = `/qr?text=${encodeURIComponent(downloadUrl)}&size=200`;
             this.els.androidDownloadBtn.href = downloadUrl;
             this.els.androidCopyBtn.dataset.url = downloadUrl;
+
+            // mapping 文件：仅在存在时显示
+            if (this.els.androidMappingBtn) {
+                const mappingUrl = this.getMappingUrl(android);
+                if (mappingUrl) {
+                    this.els.androidMappingBtn.href = mappingUrl;
+                    this.els.androidMappingBtn.textContent = android.mappingSize
+                        ? `下载 mapping (${android.mappingSize})`
+                        : '下载 mapping';
+                    this.els.androidMappingBtn.hidden = false;
+                } else {
+                    this.els.androidMappingBtn.removeAttribute('href');
+                    this.els.androidMappingBtn.hidden = true;
+                }
+            }
         }
 
         // 设置平台区域可见性
@@ -1164,6 +1190,7 @@ class ArtifactPortal {
         let actionUrl = '';
         let actionText = '';
         let copyText = '';
+        let mappingUrl = null;
 
         if (platform === 'ios') {
             actionUrl = this.getIosInstallUrl(platformData);
@@ -1173,6 +1200,7 @@ class ArtifactPortal {
             actionUrl = `${this.config.publicBaseUrl}/download/${platformData.apk}`;
             actionText = '下载 APK';
             copyText = '复制下载链接';
+            mappingUrl = this.getMappingUrl(platformData);
         }
 
         content.innerHTML = `
@@ -1183,6 +1211,10 @@ class ArtifactPortal {
                 ${platform === 'ios'
                 ? `<button class="btn btn-primary expand-install-btn" data-url="${actionUrl}">${actionText}</button>`
                 : `<a href="${actionUrl}" class="btn btn-primary expand-download-btn" download>${actionText}</a>`
+            }
+                ${mappingUrl
+                ? `<a href="${mappingUrl}" class="btn btn-mini btn-secondary expand-mapping-btn" download>下载 mapping${platformData.mappingSize ? ` (${platformData.mappingSize})` : ''}</a>`
+                : ''
             }
                 <button class="btn-link expand-copy-btn" data-url="${actionUrl}">${copyText}</button>
             </div>
@@ -1200,6 +1232,13 @@ class ArtifactPortal {
         const downloadBtn = content.querySelector('.expand-download-btn');
         if (downloadBtn) {
             downloadBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+            });
+        }
+
+        const mappingBtn = content.querySelector('.expand-mapping-btn');
+        if (mappingBtn) {
+            mappingBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
             });
         }
@@ -1459,6 +1498,7 @@ class ArtifactPortal {
         // Android 部分
         if (android?.available && (!focusPlatform || focusPlatform === 'android')) {
             const downloadUrl = `${this.config.publicBaseUrl}/download/${android.apk}`;
+            const mappingUrl = this.getMappingUrl(android);
 
             content += `
                 <div class="detail-platform-section">
@@ -1486,6 +1526,10 @@ class ArtifactPortal {
                         <a href="${downloadUrl}" class="btn btn-primary detail-download-btn" download>
                             下载 APK
                         </a>
+                        ${mappingUrl
+                    ? `<a href="${mappingUrl}" class="btn btn-mini btn-secondary detail-mapping-btn" download>下载 mapping${android.mappingSize ? ` (${android.mappingSize})` : ''}</a>`
+                    : ''
+                }
                         <button class="btn-link detail-copy-btn" data-url="${downloadUrl}">
                             复制下载链接
                         </button>

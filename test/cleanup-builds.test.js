@@ -93,3 +93,90 @@ test('cleanup script deletes old artifacts when dry run is disabled', async () =
         await rm(buildsDir, { recursive: true, force: true });
     }
 });
+
+test('cleanup script previews mapping deletion for an APK that will be removed', async () => {
+    const buildsDir = await mkdtemp(join(tmpdir(), 'artifact-cleanup-'));
+
+    try {
+        // 三个 APK，maxBuilds=2 时最旧的一个会被删除
+        const oldestApk = 'android/test/IMWE_v1.2.0.100_01_01_00_00_online-release.apk';
+        await createBuildFile(buildsDir, oldestApk, '2026-01-01T00:00:00Z');
+        await createBuildFile(
+            buildsDir,
+            'android/test/IMWE_v1.2.0.101_01_02_00_00_online-release.apk',
+            '2026-01-02T00:00:00Z'
+        );
+        await createBuildFile(
+            buildsDir,
+            'android/test/IMWE_v1.2.0.102_01_03_00_00_online-release.apk',
+            '2026-01-03T00:00:00Z'
+        );
+
+        // 最旧 APK 对应的 mapping
+        const oldestMapping = join(
+            buildsDir,
+            'android/test/mapping/IMWE_v1.2.0.100_01_01_00_00_online-release.mapping.txt'
+        );
+        await createBuildFile(
+            buildsDir,
+            'android/test/mapping/IMWE_v1.2.0.100_01_01_00_00_online-release.mapping.txt',
+            '2026-01-01T00:00:00Z'
+        );
+
+        const result = runCleanup(buildsDir, { dryRun: true, maxBuilds: 2 });
+
+        assert.equal(result.status, 0, result.stderr || result.stdout);
+        // DRY_RUN 必须同时预告 APK 与其 mapping 的删除
+        assert.match(result.stdout, /DRY_RUN.*IMWE_v1\.2\.0\.100.*\.apk/);
+        assert.match(result.stdout, /DRY_RUN.*orphan mapping.*IMWE_v1\.2\.0\.100.*\.mapping\.txt/);
+        // 预览模式不真正删除
+        assert.equal((await stat(oldestMapping)).isFile(), true);
+    } finally {
+        await rm(buildsDir, { recursive: true, force: true });
+    }
+});
+
+test('cleanup script deletes mapping together with its APK when dry run is disabled', async () => {
+    const buildsDir = await mkdtemp(join(tmpdir(), 'artifact-cleanup-'));
+
+    try {
+        const oldestApk = await createBuildFile(
+            buildsDir,
+            'android/test/IMWE_v1.2.0.100_01_01_00_00_online-release.apk',
+            '2026-01-01T00:00:00Z'
+        );
+        const newestApk = await createBuildFile(
+            buildsDir,
+            'android/test/IMWE_v1.2.0.102_01_03_00_00_online-release.apk',
+            '2026-01-03T00:00:00Z'
+        );
+        await createBuildFile(
+            buildsDir,
+            'android/test/IMWE_v1.2.0.101_01_02_00_00_online-release.apk',
+            '2026-01-02T00:00:00Z'
+        );
+
+        const oldestMapping = await createBuildFile(
+            buildsDir,
+            'android/test/mapping/IMWE_v1.2.0.100_01_01_00_00_online-release.mapping.txt',
+            '2026-01-01T00:00:00Z'
+        );
+        const newestMapping = await createBuildFile(
+            buildsDir,
+            'android/test/mapping/IMWE_v1.2.0.102_01_03_00_00_online-release.mapping.txt',
+            '2026-01-03T00:00:00Z'
+        );
+
+        const result = runCleanup(buildsDir, { dryRun: false, maxBuilds: 2 });
+
+        assert.equal(result.status, 0, result.stderr || result.stdout);
+        // 被删除的 APK 及其 mapping 都应消失
+        await assert.rejects(stat(oldestApk), /ENOENT/);
+        await assert.rejects(stat(oldestMapping), /ENOENT/);
+        // 保留的 APK 及其 mapping 都应存在
+        assert.equal((await stat(newestApk)).isFile(), true);
+        assert.equal((await stat(newestMapping)).isFile(), true);
+    } finally {
+        await rm(buildsDir, { recursive: true, force: true });
+    }
+});

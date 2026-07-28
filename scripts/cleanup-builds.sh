@@ -7,6 +7,8 @@
 # 支持目录：
 #   builds/ios/<branch>/<version>/*.ipa
 #   builds/android/<branch>/*.apk
+#   builds/android/<branch>/mapping/*.mapping.txt
+#     （随对应 APK 一起清理，APK 不存在的 mapping 视为孤立文件删除）
 # ============================================
 
 set -euo pipefail
@@ -42,6 +44,13 @@ MAX_PER_BRANCH="${MAX_PER_BRANCH:-50}"
 MAX_AGE_DAYS="${MAX_AGE_DAYS:-$(read_env_value MAX_AGE_DAYS)}"
 MAX_AGE_DAYS="${MAX_AGE_DAYS:-30}"
 DRY_RUN="${DRY_RUN:-true}"
+
+# 记录本轮"计划删除"的 APK 路径（每行一个）。
+# 孤立 mapping 判断时同时参考此集合，使 DRY_RUN 预览与真实运行的删除范围一致：
+# 真实运行时 APK 已被删除，靠文件是否存在即可判断；
+# DRY_RUN 时 APK 仍在磁盘上，必须借助此集合才能预告随之删除的 mapping。
+PLANNED_APK_DELETIONS="$(mktemp)"
+trap 'rm -f "$PLANNED_APK_DELETIONS"' EXIT
 
 if [ "${NO_COLOR:-false}" = "true" ]; then
     GREEN=''
@@ -80,6 +89,11 @@ file_mtime() {
 delete_file() {
     local file="$1"
     local reason="$2"
+
+    # 记录被删除的 APK，供后续孤立 mapping 判断使用（DRY_RUN 下也记录）。
+    case "$file" in
+        *.apk) printf '%s\n' "$file" >> "$PLANNED_APK_DELETIONS" ;;
+    esac
 
     if [ "$DRY_RUN" = "true" ]; then
         log_warn "[DRY_RUN] delete ($reason): $file"
@@ -150,6 +164,37 @@ cleanup_platform() {
     cleanup_empty_dirs "$platform_dir"
 }
 
+# 删除没有对应 APK 的 mapping 文件
+cleanup_orphan_mappings() {
+    local android_dir="$BUILDS_DIR/android"
+
+    if [ ! -d "$android_dir" ]; then
+        return 0
+    fi
+
+    find "$android_dir" -mindepth 2 -maxdepth 2 -type d -name 'mapping' -print0 |
+        while IFS= read -r -d '' mapping_dir; do
+            local branch_dir
+            branch_dir="$(dirname "$mapping_dir")"
+
+            find "$mapping_dir" -maxdepth 1 -type f -name '*.mapping.txt' -print0 |
+                while IFS= read -r -d '' mapping_file; do
+                    local base apk_path
+                    base="$(basename "$mapping_file")"
+                    base="${base%.mapping.txt}"
+                    apk_path="$branch_dir/$base.apk"
+
+                    # 对应 APK 已不在磁盘，或本轮计划删除，均视为孤立 mapping。
+                    # 后者保证 DRY_RUN 能预告随 APK 一起被删的 mapping。
+                    if [ ! -f "$apk_path" ] || grep -qxF "$apk_path" "$PLANNED_APK_DELETIONS"; then
+                        delete_file "$mapping_file" "orphan mapping"
+                    fi
+                done
+        done
+
+    cleanup_empty_dirs "$android_dir"
+}
+
 if [ ! -d "$BUILDS_DIR" ]; then
     log_error "构建目录不存在: $BUILDS_DIR"
     exit 1
@@ -164,6 +209,7 @@ fi
 
 cleanup_platform "ios" "*.ipa"
 cleanup_platform "android" "*.apk"
+cleanup_orphan_mappings
 
 log_info "清理完成"
 if command -v du >/dev/null 2>&1; then

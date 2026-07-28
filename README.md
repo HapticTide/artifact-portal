@@ -96,6 +96,7 @@ artifact-portal/
 | `GET /api/health` | 健康检查 |
 | `POST /api/upload/ios` | 上传 iOS IPA 文件 |
 | `POST /api/upload/android` | 上传 Android APK 文件 |
+| `POST /api/upload/android/mapping` | 上传 Android mapping（混淆映射）文件 |
 | `GET /qr?text=...` | 生成二维码 |
 | `GET /download/:dir/:file` | 下载构建文件 |
 
@@ -116,6 +117,27 @@ curl -X POST \
   --data-binary "@/path/to/IMWE_v1.2.0.123_06_02_10_30_online-release.apk" \
   "http://127.0.0.1:8088/api/upload/android?branch=origin/dev&filename=IMWE_v1.2.0.123_06_02_10_30_online-release.apk"
 ```
+
+### 上传 Android mapping 文件
+
+mapping 通过 `apk` 参数与已上传的 APK 绑定，**必须先上传 APK**，否则返回 404。
+
+```bash
+curl -X POST \
+  -H "Authorization: Bearer $UPLOAD_TOKEN" \
+  --data-binary "@/path/to/mapping.txt" \
+  "http://127.0.0.1:8088/api/upload/android/mapping?branch=origin/dev&apk=IMWE_v1.2.0.123_06_02_10_30_online-release.apk&filename=mapping.txt"
+```
+
+| 参数 | 必填 | 说明 |
+|------|------|------|
+| `branch` | 是 | 分支名，与 APK 上传时保持一致 |
+| `apk` | 是 | 对应的 APK 文件名（含 `.apk`） |
+| `filename` | 否 | 仅支持 `.txt`，默认 `mapping.txt`；其他扩展名会被拒绝 |
+
+存储路径固定为 `android/<branch>/mapping/<APK 文件名去掉 .apk>.mapping.txt`。
+由于扩展名唯一，重复上传同一 APK 的 mapping 会覆盖旧文件。
+上传后该构建在页面上会在「下载 APK」下方出现「下载 mapping」小按钮。
 
 ## 📱 iOS 安装说明
 
