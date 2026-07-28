@@ -598,6 +598,7 @@ body {
     background: transparent;
     border: none;
     padding: var(--spacing-xs) 0;
+    text-decoration: none;
     font-size: 12px;
     font-weight: normal;
     cursor: pointer;
@@ -644,6 +645,12 @@ body {
     .desktop-copy-btn {
         display: inline-block;
     }
+
+    .desktop-qr-actions {
+        display: flex;
+        align-items: center;
+        gap: var(--spacing-md);
+    }
 }
 
 /* 移动端：复制链接居右，隐藏桌面端复制按钮 */
@@ -653,6 +660,10 @@ body {
     }
 
     .desktop-copy-btn {
+        display: none;
+    }
+
+    .desktop-qr-actions {
         display: none;
     }
 }
@@ -1433,6 +1444,12 @@ body {
 /* 展开区域复制链接按钮颜色 */
 .expand-actions .btn-link {
     font-size: 13px;
+}
+
+.expand-link-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-md);
 }
 
 /* iOS 构建展开区域用蓝色 */
