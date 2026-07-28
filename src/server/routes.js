@@ -259,7 +259,7 @@ router.post('/api/upload/android', async (req, res) => {
 
 /**
  * POST /api/upload/android/mapping - 上传 Android mapping（混淆映射）文件
- * Query: branch, apk（对应的 APK 文件名）, filename（可选，仅用于判断 .txt/.zip，默认 mapping.txt）
+ * Query: branch, apk（对应的 APK 文件名）, filename（可选，仅支持 .txt，默认 mapping.txt）
  * Auth: Authorization: Bearer <UPLOAD_TOKEN>
  *
  * 存储路径：android/<branch>/mapping/<apk 文件名去掉 .apk>.mapping.<txt|zip>
@@ -304,7 +304,7 @@ router.post('/api/upload/android/mapping', async (req, res) => {
         if (!validateAndroidMappingUploadFile(uploadFilename)) {
             return res.status(400).json({
                 success: false,
-                error: 'mapping 文件只允许 .txt 或 .zip 格式',
+                error: 'mapping 文件只允许 .txt 格式',
             });
         }
 
@@ -331,9 +331,11 @@ router.post('/api/upload/android/mapping', async (req, res) => {
                 throw new Error('Not a file');
             }
         } catch {
+            // 完整存储路径只打服务端日志，响应体使用通用文案，避免泄漏文件系统布局
+            console.warn(`mapping 上传失败：对应 APK 不存在 ${target.apkRelativePath}`);
             return res.status(404).json({
                 success: false,
-                error: `对应的 APK 不存在，请先上传 APK：${target.apkRelativePath}`,
+                error: '对应的 APK 不存在，请先上传 APK',
             });
         }
 

@@ -133,10 +133,11 @@ curl -X POST \
 |------|------|------|
 | `branch` | 是 | 分支名，与 APK 上传时保持一致 |
 | `apk` | 是 | 对应的 APK 文件名（含 `.apk`） |
-| `filename` | 否 | 仅用于判断格式，支持 `.txt` / `.zip`，默认 `mapping.txt` |
+| `filename` | 否 | 仅支持 `.txt`，默认 `mapping.txt`；其他扩展名会被拒绝 |
 
-存储路径为 `android/<branch>/mapping/<APK 文件名去掉 .apk>.mapping.txt`。
-上传后该构建在页面上会在「下载 APK」下方出现「下载 mapping」小按钮，重复上传会覆盖。
+存储路径固定为 `android/<branch>/mapping/<APK 文件名去掉 .apk>.mapping.txt`。
+由于扩展名唯一，重复上传同一 APK 的 mapping 会覆盖旧文件。
+上传后该构建在页面上会在「下载 APK」下方出现「下载 mapping」小按钮。
 
 ## 📱 iOS 安装说明
 

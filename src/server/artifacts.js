@@ -29,7 +29,7 @@ import config from './config.js';
 import buildDatabase from './database.js';
 import { readDirSafe, getFileSize, getDiskUsage } from './utils/fs.js';
 import { formatFileSize } from './utils/format.js';
-import { ANDROID_MAPPING_DIR, androidMappingCandidates } from './upload.js';
+import { ANDROID_MAPPING_DIR, androidMappingCandidates } from './androidMapping.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
