@@ -96,9 +96,14 @@
                         <!-- 二维码内容（独立容器，展开收起不影响上方布局） -->
                         <div id="ios-qr-content" class="qr-content collapsed">
                             <img id="ios-qr" class="qr-code" alt="iOS 安装二维码">
-                            <button class="btn-link desktop-copy-btn" data-copy-from="ios-copy-btn">
-                                复制安装链接
-                            </button>
+                            <div class="desktop-qr-actions">
+                                <button class="btn-link desktop-copy-btn" data-copy-from="ios-copy-btn">
+                                    复制安装链接
+                                </button>
+                                <a id="ios-download-btn" class="btn-link" href="#" download>
+                                    下载 IPA
+                                </a>
+                            </div>
                         </div>
                     </div>
                 </div>
