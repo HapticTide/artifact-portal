@@ -816,6 +816,24 @@ body {
     font-size: 16px;
 }
 
+/* 小尺寸次要按钮（如 mapping 下载） */
+/* 与二维码同一套配色：白底 + 纯黑文字，明暗主题下都可读 */
+.btn-mini {
+    width: auto;
+    align-self: center;
+    padding: 6px var(--spacing-md);
+    font-size: 12px;
+    font-weight: 600;
+    color: #000;
+    background-color: #fff;
+    border-color: rgba(0, 0, 0, 0.12);
+}
+
+.btn-mini:hover {
+    color: #000;
+    background-color: #F0F0F0;
+}
+
 /* ============================================
    更新日志
    ============================================ */

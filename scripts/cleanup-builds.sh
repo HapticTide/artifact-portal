@@ -7,6 +7,8 @@
 # 支持目录：
 #   builds/ios/<branch>/<version>/*.ipa
 #   builds/android/<branch>/*.apk
+#   builds/android/<branch>/mapping/*.mapping.{txt,zip}
+#     （随对应 APK 一起清理，APK 不存在的 mapping 视为孤立文件删除）
 # ============================================
 
 set -euo pipefail
@@ -150,6 +152,36 @@ cleanup_platform() {
     cleanup_empty_dirs "$platform_dir"
 }
 
+# 删除没有对应 APK 的 mapping 文件
+cleanup_orphan_mappings() {
+    local android_dir="$BUILDS_DIR/android"
+
+    if [ ! -d "$android_dir" ]; then
+        return 0
+    fi
+
+    find "$android_dir" -mindepth 2 -maxdepth 2 -type d -name 'mapping' -print0 |
+        while IFS= read -r -d '' mapping_dir; do
+            local branch_dir
+            branch_dir="$(dirname "$mapping_dir")"
+
+            find "$mapping_dir" -maxdepth 1 -type f \
+                \( -name '*.mapping.txt' -o -name '*.mapping.zip' \) -print0 |
+                while IFS= read -r -d '' mapping_file; do
+                    local base
+                    base="$(basename "$mapping_file")"
+                    base="${base%.mapping.txt}"
+                    base="${base%.mapping.zip}"
+
+                    if [ ! -f "$branch_dir/$base.apk" ]; then
+                        delete_file "$mapping_file" "orphan mapping"
+                    fi
+                done
+        done
+
+    cleanup_empty_dirs "$android_dir"
+}
+
 if [ ! -d "$BUILDS_DIR" ]; then
     log_error "构建目录不存在: $BUILDS_DIR"
     exit 1
@@ -164,6 +196,7 @@ fi
 
 cleanup_platform "ios" "*.ipa"
 cleanup_platform "android" "*.apk"
+cleanup_orphan_mappings
 
 log_info "清理完成"
 if command -v du >/dev/null 2>&1; then
