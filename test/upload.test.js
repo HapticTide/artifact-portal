@@ -2,10 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
     buildAndroidMappingUploadTarget,
-    buildAndroidMappingUploadTarget,
     buildAndroidUploadTarget,
     buildIosUploadTarget,
-    validateAndroidMappingUploadFile,
     validateAndroidMappingUploadFile,
     validateAndroidUploadFile,
     validateIosUploadFile,
