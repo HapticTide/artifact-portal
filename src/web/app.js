@@ -75,6 +75,7 @@ class ArtifactPortal {
             iosQr: document.getElementById('ios-qr'),
             iosInstallBtn: document.getElementById('ios-install-btn'),
             iosCopyBtn: document.getElementById('ios-copy-btn'),
+            iosDownloadBtn: document.getElementById('ios-download-btn'),
 
             // Android
             androidSection: document.getElementById('android-section'),
@@ -595,6 +596,16 @@ class ArtifactPortal {
     }
 
     /**
+     * 获取 Android mapping 文件下载链接
+     * @param {object} android - Android 平台数据
+     * @returns {string|null} 没有 mapping 时返回 null
+     */
+    getMappingUrl(android) {
+        if (!android?.mapping) return null;
+        return `${this.config.publicBaseUrl}/download/${android.mapping}`;
+    }
+
+    /**
      * 加载构建列表（按天数分页）
      * @param {boolean} append - 是否追加模式（加载更多）
      * @param {object} options - 可选的筛选参数
@@ -826,9 +837,11 @@ class ArtifactPortal {
 
             // 使用统一的方法生成安装链接
             const installUrl = this.getIosInstallUrl(ios);
+            const downloadUrl = `${this.config.publicBaseUrl}/download/${ios.ipa}`;
 
             this.els.iosQr.src = `/qr?text=${encodeURIComponent(installUrl)}&size=200`;
             this.els.iosCopyBtn.dataset.url = installUrl;
+            this.els.iosDownloadBtn.href = downloadUrl;
         }
 
         // Android 平台
@@ -1191,15 +1204,18 @@ class ArtifactPortal {
         let actionText = '';
         let copyText = '';
         let mappingUrl = null;
+        let ipaDownloadUrl = '';
 
         if (platform === 'ios') {
             actionUrl = this.getIosInstallUrl(platformData);
             actionText = '点击安装';
             copyText = '复制安装链接';
+            ipaDownloadUrl = `${this.config.publicBaseUrl}/download/${platformData.ipa}`;
         } else {
             actionUrl = `${this.config.publicBaseUrl}/download/${platformData.apk}`;
             actionText = '下载 APK';
             copyText = '复制下载链接';
+            mappingUrl = this.getMappingUrl(platformData);
             mappingUrl = this.getMappingUrl(platformData);
         }
 
@@ -1216,7 +1232,13 @@ class ArtifactPortal {
                 ? `<a href="${mappingUrl}" class="btn btn-mini btn-secondary expand-mapping-btn" download>下载 mapping${platformData.mappingSize ? ` (${platformData.mappingSize})` : ''}</a>`
                 : ''
             }
-                <button class="btn-link expand-copy-btn" data-url="${actionUrl}">${copyText}</button>
+
+                    <div class="expand-link-actions">
+                    <button class="btn-link expand-copy-btn" data-url="${actionUrl}">${copyText}</button>
+                    ${platform === 'ios'
+                    ? `<a href="${ipaDownloadUrl}" class="btn-link expand-ipa-download-btn" download>下载 IPA</a>`
+                    : ''}
+                </div>
             </div>
         `;
 

@@ -52,6 +52,13 @@ DRY_RUN="${DRY_RUN:-true}"
 PLANNED_APK_DELETIONS="$(mktemp)"
 trap 'rm -f "$PLANNED_APK_DELETIONS"' EXIT
 
+# 记录本轮"计划删除"的 APK 路径（每行一个）。
+# 孤立 mapping 判断时同时参考此集合，使 DRY_RUN 预览与真实运行的删除范围一致：
+# 真实运行时 APK 已被删除，靠文件是否存在即可判断；
+# DRY_RUN 时 APK 仍在磁盘上，必须借助此集合才能预告随之删除的 mapping。
+PLANNED_APK_DELETIONS="$(mktemp)"
+trap 'rm -f "$PLANNED_APK_DELETIONS"' EXIT
+
 if [ "${NO_COLOR:-false}" = "true" ]; then
     GREEN=''
     YELLOW=''
@@ -89,6 +96,11 @@ file_mtime() {
 delete_file() {
     local file="$1"
     local reason="$2"
+
+    # 记录被删除的 APK，供后续孤立 mapping 判断使用（DRY_RUN 下也记录）。
+    case "$file" in
+        *.apk) printf '%s\n' "$file" >> "$PLANNED_APK_DELETIONS" ;;
+    esac
 
     # 记录被删除的 APK，供后续孤立 mapping 判断使用（DRY_RUN 下也记录）。
     case "$file" in
@@ -206,6 +218,7 @@ fi
 
 cleanup_platform "ios" "*.ipa"
 cleanup_platform "android" "*.apk"
+cleanup_orphan_mappings
 cleanup_orphan_mappings
 
 log_info "清理完成"

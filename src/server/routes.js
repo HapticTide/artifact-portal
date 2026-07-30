@@ -16,8 +16,10 @@ import { generateQRCode, getQRCacheStats } from './utils/qrcode.js';
 import { isPathSafe, isExtensionAllowed } from './utils/fs.js';
 import {
     buildAndroidMappingUploadTarget,
+    buildAndroidMappingUploadTarget,
     buildAndroidUploadTarget,
     buildIosUploadTarget,
+    validateAndroidMappingUploadFile,
     validateAndroidMappingUploadFile,
     validateAndroidUploadFile,
     validateIosUploadFile,
