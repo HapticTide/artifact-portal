@@ -11,6 +11,7 @@ import {
 import {
     androidMappingCandidates,
     androidMappingFilenameForApk,
+    apkFilenameHasVersionBuild,
 } from '../src/server/androidMapping.js';
 
 test('buildIosUploadTarget creates safe iOS build path', () => {
@@ -34,20 +35,22 @@ test('validateIosUploadFile only accepts ipa files', () => {
     assert.equal(validateIosUploadFile('../IMWE-1.2.0(123).ipa'), false);
 });
 
-test('buildAndroidUploadTarget creates safe Android build path', () => {
+test('buildAndroidUploadTarget creates safe Android build path with version.build dir', () => {
     const target = buildAndroidUploadTarget({
         buildsDir: '/var/lib/artifact-portal/builds',
         branch: 'origin/feat/tank/upload portal',
         filename: 'IMWE_v1.2.0.123_06_02_10_30_online-release.apk',
     });
 
+    // 目录名同时包含版本号与 build 号，避免同一版本号多次打包互相覆盖
+    assert.equal(target.version, '1.2.0.123');
     assert.equal(
         target.relativePath,
-        'android/feat-tank-upload-portal/IMWE_v1.2.0.123_06_02_10_30_online-release.apk'
+        'android/feat-tank-upload-portal/1.2.0.123/IMWE_v1.2.0.123_06_02_10_30_online-release.apk'
     );
     assert.equal(
         target.absolutePath,
-        '/var/lib/artifact-portal/builds/android/feat-tank-upload-portal/IMWE_v1.2.0.123_06_02_10_30_online-release.apk'
+        '/var/lib/artifact-portal/builds/android/feat-tank-upload-portal/1.2.0.123/IMWE_v1.2.0.123_06_02_10_30_online-release.apk'
     );
 });
 
@@ -57,62 +60,79 @@ test('validateAndroidUploadFile only accepts apk files', () => {
     assert.equal(validateAndroidUploadFile('../IMWE_v1.2.0.123_06_02_10_30_online-release.apk'), false);
 });
 
-test('validateAndroidMappingUploadFile only accepts txt files', () => {
-    assert.equal(validateAndroidMappingUploadFile('mapping.txt'), true);
-    assert.equal(validateAndroidMappingUploadFile('mapping.TXT'), true);
-    // .zip 及其他扩展名均被拒绝
-    assert.equal(validateAndroidMappingUploadFile('mapping.zip'), false);
-    assert.equal(validateAndroidMappingUploadFile('mapping'), false);
-    assert.equal(validateAndroidMappingUploadFile('../mapping.txt'), false);
+test('apkFilenameHasVersionBuild requires both version and build number', () => {
+    // 版本号 + build 号齐全
+    assert.equal(
+        apkFilenameHasVersionBuild('IMWE_v1.2.0.123_06_02_10_30_online-release.apk'),
+        true
+    );
+    assert.equal(
+        apkFilenameHasVersionBuild('MyApp_v0.6.0.14_01_12_15_31_online-release.apk'),
+        true
+    );
+    // 只有版本号，缺少 build 号，必须被拒绝——否则会静默落到 unknown 目录且在页面上"消失"
+    assert.equal(apkFilenameHasVersionBuild('MyApp_v1.2.0_release.apk'), false);
+    assert.equal(apkFilenameHasVersionBuild('MyApp.apk'), false);
+    assert.equal(apkFilenameHasVersionBuild('not-an-apk.txt'), false);
 });
 
-test('androidMappingFilenameForApk derives a single txt filename', () => {
+test('validateAndroidMappingUploadFile only accepts zip files', () => {
+    assert.equal(validateAndroidMappingUploadFile('mapping.zip'), true);
+    assert.equal(validateAndroidMappingUploadFile('mapping.ZIP'), true);
+    // .txt 及其他扩展名均被拒绝
+    assert.equal(validateAndroidMappingUploadFile('mapping.txt'), false);
+    assert.equal(validateAndroidMappingUploadFile('mapping'), false);
+    assert.equal(validateAndroidMappingUploadFile('../mapping.zip'), false);
+});
+
+test('androidMappingFilenameForApk derives a single zip filename', () => {
     assert.equal(
         androidMappingFilenameForApk('IMWE_v1.2.0.123_online-release.apk'),
-        'IMWE_v1.2.0.123_online-release.mapping.txt'
+        'IMWE_v1.2.0.123_online-release.mapping.zip'
     );
 });
 
-test('androidMappingCandidates returns exactly one txt candidate', () => {
+test('androidMappingCandidates returns exactly one zip candidate', () => {
     const candidates = androidMappingCandidates('IMWE_v1.2.0.123_online-release.apk');
-    assert.deepEqual(candidates, ['IMWE_v1.2.0.123_online-release.mapping.txt']);
+    assert.deepEqual(candidates, ['IMWE_v1.2.0.123_online-release.mapping.zip']);
 });
 
-test('buildAndroidMappingUploadTarget maps txt uploads to a stable path', () => {
-    // 无论传入的 mapping 文件名如何，只要是 .txt，落盘路径都由 APK 名决定
+test('buildAndroidMappingUploadTarget maps zip uploads to a stable path alongside the apk', () => {
+    // 无论传入的 mapping 文件名如何，只要是 .zip，落盘路径都由 APK 名决定
     const fromPlain = buildAndroidMappingUploadTarget({
         buildsDir: '/var/lib/artifact-portal/builds',
         branch: 'origin/dev',
         apkFilename: 'IMWE_v1.2.0.123_online-release.apk',
-        filename: 'mapping.txt',
+        filename: 'mapping.zip',
     });
     const fromRenamed = buildAndroidMappingUploadTarget({
         buildsDir: '/var/lib/artifact-portal/builds',
         branch: 'origin/dev',
         apkFilename: 'IMWE_v1.2.0.123_online-release.apk',
-        filename: 'r8-mapping.txt',
+        filename: 'r8-mapping.zip',
     });
 
     const expectedRelative =
-        'android/dev/mapping/IMWE_v1.2.0.123_online-release.mapping.txt';
+        'android/dev/1.2.0.123/IMWE_v1.2.0.123_online-release.mapping.zip';
 
     assert.equal(fromPlain.relativePath, expectedRelative);
     // 两次不同的上传文件名解析到同一路径，保证重复上传必然覆盖
     assert.equal(fromRenamed.relativePath, expectedRelative);
     assert.equal(
         fromPlain.absolutePath,
-        '/var/lib/artifact-portal/builds/android/dev/mapping/IMWE_v1.2.0.123_online-release.mapping.txt'
+        '/var/lib/artifact-portal/builds/android/dev/1.2.0.123/IMWE_v1.2.0.123_online-release.mapping.zip'
     );
-    assert.equal(fromPlain.apkRelativePath, 'android/dev/IMWE_v1.2.0.123_online-release.apk');
+    // mapping 与 APK 落在同一个 version.build 目录下
+    assert.equal(fromPlain.apkRelativePath, 'android/dev/1.2.0.123/IMWE_v1.2.0.123_online-release.apk');
 });
 
-test('buildAndroidMappingUploadTarget rejects non-txt mapping files', () => {
+test('buildAndroidMappingUploadTarget rejects non-zip mapping files', () => {
     assert.throws(() => buildAndroidMappingUploadTarget({
         buildsDir: '/var/lib/artifact-portal/builds',
         branch: 'origin/dev',
         apkFilename: 'IMWE_v1.2.0.123_online-release.apk',
-        filename: 'mapping.zip',
-    }), /只允许 \.txt/);
+        filename: 'mapping.txt',
+    }), /只允许 \.zip/);
 });
 
 test('buildAndroidMappingUploadTarget rejects invalid apk filename', () => {
@@ -120,6 +140,6 @@ test('buildAndroidMappingUploadTarget rejects invalid apk filename', () => {
         buildsDir: '/var/lib/artifact-portal/builds',
         branch: 'origin/dev',
         apkFilename: 'not-an-apk.txt',
-        filename: 'mapping.txt',
+        filename: 'mapping.zip',
     }), /\.apk/);
 });

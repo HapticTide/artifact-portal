@@ -118,24 +118,30 @@ curl -X POST \
   "http://127.0.0.1:8088/api/upload/android?branch=origin/dev&filename=IMWE_v1.2.0.123_06_02_10_30_online-release.apk"
 ```
 
+存储路径的版本目录名为 `<version>.<build>`（从文件名自动解析，如上例中的 `1.2.0.123`），
+存储路径为 `android/<branch>/<version>.<build>/<filename>`。
+目录名带上 build 号是为了避免同一版本号下多次打包（build 递增）时互相冲突或混在一起。
+
 ### 上传 Android mapping 文件
 
 mapping 通过 `apk` 参数与已上传的 APK 绑定，**必须先上传 APK**，否则返回 404。
+mapping 只接受 `.zip`（R8/ProGuard 混淆映射打包产物，通常内含 `mapping.txt` 等多个文件）。
 
 ```bash
 curl -X POST \
   -H "Authorization: Bearer $UPLOAD_TOKEN" \
-  --data-binary "@/path/to/mapping.txt" \
-  "http://127.0.0.1:8088/api/upload/android/mapping?branch=origin/dev&apk=IMWE_v1.2.0.123_06_02_10_30_online-release.apk&filename=mapping.txt"
+  --data-binary "@/path/to/mapping.zip" \
+  "http://127.0.0.1:8088/api/upload/android/mapping?branch=origin/dev&apk=IMWE_v1.2.0.123_06_02_10_30_online-release.apk&filename=mapping.zip"
 ```
 
 | 参数 | 必填 | 说明 |
 |------|------|------|
 | `branch` | 是 | 分支名，与 APK 上传时保持一致 |
 | `apk` | 是 | 对应的 APK 文件名（含 `.apk`） |
-| `filename` | 否 | 仅支持 `.txt`，默认 `mapping.txt`；其他扩展名会被拒绝 |
+| `filename` | 否 | 仅支持 `.zip`，默认 `mapping.zip`；其他扩展名会被拒绝 |
 
-存储路径固定为 `android/<branch>/mapping/<APK 文件名去掉 .apk>.mapping.txt`。
+版本目录名（`<version>.<build>`）会从 APK 文件名自动解析（无需额外传参），存储路径固定为
+`android/<branch>/<version>.<build>/<APK 文件名去掉 .apk>.mapping.zip`，与对应 APK 放在同一目录下。
 由于扩展名唯一，重复上传同一 APK 的 mapping 会覆盖旧文件。
 上传后该构建在页面上会在「下载 APK」下方出现「下载 mapping」小按钮。
 
@@ -241,7 +247,8 @@ sudo systemctl status artifact-portal
 
 ```text
 builds/ios/<branch>/<version>/*.ipa
-builds/android/<branch>/*.apk
+builds/android/<branch>/<version>.<build>/*.apk
+builds/android/<branch>/<version>.<build>/*.mapping.zip
 ```
 
 ```bash

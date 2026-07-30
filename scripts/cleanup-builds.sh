@@ -6,9 +6,9 @@
 #
 # 支持目录：
 #   builds/ios/<branch>/<version>/*.ipa
-#   builds/android/<branch>/*.apk
-#   builds/android/<branch>/mapping/*.mapping.txt
-#     （随对应 APK 一起清理，APK 不存在的 mapping 视为孤立文件删除）
+#   builds/android/<branch>/<version>.<build>/*.apk
+#   builds/android/<branch>/<version>.<build>/*.mapping.zip
+#     （与对应 APK 同目录，随 APK 一起清理，APK 不存在的 mapping 视为孤立文件删除）
 # ============================================
 
 set -euo pipefail
@@ -165,6 +165,8 @@ cleanup_platform() {
 }
 
 # 删除没有对应 APK 的 mapping 文件
+# mapping 与 APK 同放在 android/<branch>/<version>/ 目录下，
+# 按文件名去掉 .mapping.zip 后拼出同目录下的 .apk 路径即可判断是否孤立。
 cleanup_orphan_mappings() {
     local android_dir="$BUILDS_DIR/android"
 
@@ -172,24 +174,19 @@ cleanup_orphan_mappings() {
         return 0
     fi
 
-    find "$android_dir" -mindepth 2 -maxdepth 2 -type d -name 'mapping' -print0 |
-        while IFS= read -r -d '' mapping_dir; do
-            local branch_dir
-            branch_dir="$(dirname "$mapping_dir")"
+    find "$android_dir" -type f -name '*.mapping.zip' -print0 |
+        while IFS= read -r -d '' mapping_file; do
+            local version_dir base apk_path
+            version_dir="$(dirname "$mapping_file")"
+            base="$(basename "$mapping_file")"
+            base="${base%.mapping.zip}"
+            apk_path="$version_dir/$base.apk"
 
-            find "$mapping_dir" -maxdepth 1 -type f -name '*.mapping.txt' -print0 |
-                while IFS= read -r -d '' mapping_file; do
-                    local base apk_path
-                    base="$(basename "$mapping_file")"
-                    base="${base%.mapping.txt}"
-                    apk_path="$branch_dir/$base.apk"
-
-                    # 对应 APK 已不在磁盘，或本轮计划删除，均视为孤立 mapping。
-                    # 后者保证 DRY_RUN 能预告随 APK 一起被删的 mapping。
-                    if [ ! -f "$apk_path" ] || grep -qxF "$apk_path" "$PLANNED_APK_DELETIONS"; then
-                        delete_file "$mapping_file" "orphan mapping"
-                    fi
-                done
+            # 对应 APK 已不在磁盘，或本轮计划删除，均视为孤立 mapping。
+            # 后者保证 DRY_RUN 能预告随 APK 一起被删的 mapping。
+            if [ ! -f "$apk_path" ] || grep -qxF "$apk_path" "$PLANNED_APK_DELETIONS"; then
+                delete_file "$mapping_file" "orphan mapping"
+            fi
         done
 
     cleanup_empty_dirs "$android_dir"
