@@ -154,17 +154,29 @@ class BuildDatabase {
         };
 
         const query = db.prepare(`
-            SELECT 
+            SELECT
                 dir,
                 version,
                 build,
                 size,
                 time,
                 branch
-            FROM builds
-            WHERE platform = ? AND size > 0
+            FROM (
+                -- 先截取最新记录，避免 LIMIT 选中最早的一批历史构建。
+                SELECT
+                    dir,
+                    version,
+                    build,
+                    size,
+                    time,
+                    branch
+                FROM builds
+                WHERE platform = ? AND size > 0
+                ORDER BY time DESC
+                LIMIT ?
+            ) AS latest_builds
+            -- 图表仍按时间正序绘制，摘要末项即为最新构建。
             ORDER BY time ASC
-            LIMIT ?
         `);
 
         // iOS 统计
