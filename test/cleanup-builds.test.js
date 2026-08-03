@@ -181,3 +181,25 @@ test('cleanup script deletes mapping together with its APK when dry run is disab
         await rm(buildsDir, { recursive: true, force: true });
     }
 });
+
+test('cleanup script deletes legacy mapping.txt in old mapping/ subdirectory', async () => {
+    const buildsDir = await mkdtemp(join(tmpdir(), 'artifact-cleanup-'));
+
+    try {
+        // 旧结构：mapping 放在 android/<branch>/mapping/ 目录下
+        const legacyMapping = await createBuildFile(
+            buildsDir,
+            'android/test/mapping/IMWE_v1.2.0.100_01_01_00_00_online-release.mapping.txt',
+            '2026-01-01T00:00:00Z'
+        );
+
+        const result = runCleanup(buildsDir, { dryRun: false, maxBuilds: 50 });
+
+        assert.equal(result.status, 0, result.stderr || result.stdout);
+        // 旧 mapping.txt 应被删除
+        await assert.rejects(stat(legacyMapping), /ENOENT/);
+        assert.match(result.stdout, /legacy mapping/);
+    } finally {
+        await rm(buildsDir, { recursive: true, force: true });
+    }
+});

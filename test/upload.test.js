@@ -76,12 +76,15 @@ test('apkFilenameHasVersionBuild requires both version and build number', () => 
     assert.equal(apkFilenameHasVersionBuild('not-an-apk.txt'), false);
 });
 
-test('validateAndroidMappingUploadFile only accepts zip files', () => {
+test('validateAndroidMappingUploadFile accepts zip and txt files', () => {
     assert.equal(validateAndroidMappingUploadFile('mapping.zip'), true);
     assert.equal(validateAndroidMappingUploadFile('mapping.ZIP'), true);
-    // .txt 及其他扩展名均被拒绝
-    assert.equal(validateAndroidMappingUploadFile('mapping.txt'), false);
+    // 过渡期兼容旧 CI：.txt 也接受，落盘统一为 .zip
+    assert.equal(validateAndroidMappingUploadFile('mapping.txt'), true);
+    assert.equal(validateAndroidMappingUploadFile('mapping.TXT'), true);
+    // 其他扩展名仍被拒绝
     assert.equal(validateAndroidMappingUploadFile('mapping'), false);
+    assert.equal(validateAndroidMappingUploadFile('mapping.json'), false);
     assert.equal(validateAndroidMappingUploadFile('../mapping.zip'), false);
 });
 
@@ -126,13 +129,27 @@ test('buildAndroidMappingUploadTarget maps zip uploads to a stable path alongsid
     assert.equal(fromPlain.apkRelativePath, 'android/dev/1.2.0.123/IMWE_v1.2.0.123_online-release.apk');
 });
 
-test('buildAndroidMappingUploadTarget rejects non-zip mapping files', () => {
-    assert.throws(() => buildAndroidMappingUploadTarget({
+test('buildAndroidMappingUploadTarget accepts .txt and normalizes to .zip on disk', () => {
+    const result = buildAndroidMappingUploadTarget({
         buildsDir: '/var/lib/artifact-portal/builds',
         branch: 'origin/dev',
         apkFilename: 'IMWE_v1.2.0.123_online-release.apk',
         filename: 'mapping.txt',
-    }), /只允许 \.zip/);
+    });
+    // 即使上传 .txt，落盘仍为 .zip
+    assert.equal(
+        result.relativePath,
+        'android/dev/1.2.0.123/IMWE_v1.2.0.123_online-release.mapping.zip'
+    );
+});
+
+test('buildAndroidMappingUploadTarget rejects non-zip-or-txt mapping files', () => {
+    assert.throws(() => buildAndroidMappingUploadTarget({
+        buildsDir: '/var/lib/artifact-portal/builds',
+        branch: 'origin/dev',
+        apkFilename: 'IMWE_v1.2.0.123_online-release.apk',
+        filename: 'mapping.json',
+    }), /只允许/);
 });
 
 test('buildAndroidMappingUploadTarget rejects invalid apk filename', () => {

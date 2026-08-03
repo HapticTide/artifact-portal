@@ -322,7 +322,7 @@ router.post('/api/upload/android/mapping', async (req, res) => {
         if (!validateAndroidMappingUploadFile(uploadFilename)) {
             return res.status(400).json({
                 success: false,
-                error: 'mapping 文件只允许 .zip 格式',
+                error: 'mapping 文件只允许 .zip 或 .txt 格式',
             });
         }
 

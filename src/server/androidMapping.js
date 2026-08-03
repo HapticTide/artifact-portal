@@ -56,14 +56,16 @@ export function androidMappingCandidates(apkFilename) {
 
 /**
  * 校验 mapping 文件名（只允许 .zip，且不含目录分隔符）
+ * 过渡期同时接受 .txt（旧 CI 传参），落盘统一为 .zip（由 buildAndroidMappingUploadTarget 处理）
  * @param {string} filename
  * @returns {boolean}
  */
 export function isAndroidMappingFilename(filename) {
-    return typeof filename === 'string'
-        && Boolean(filename)
-        && basename(filename) === filename
-        && filename.toLowerCase().endsWith(ANDROID_MAPPING_EXTENSION);
+    if (typeof filename !== 'string' || !filename || basename(filename) !== filename) {
+        return false;
+    }
+    const lower = filename.toLowerCase();
+    return lower.endsWith(ANDROID_MAPPING_EXTENSION) || lower.endsWith('.txt');
 }
 
 /**

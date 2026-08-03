@@ -95,7 +95,7 @@ export function buildAndroidMappingUploadTarget({ buildsDir, branch, apkFilename
     }
 
     if (!validateAndroidMappingUploadFile(filename)) {
-        throw new Error('mapping 文件只允许 .zip 格式');
+        throw new Error('mapping 文件只允许 .zip 或 .txt 格式');
     }
 
     const safeBranch = sanitizeSegment(branch, 'unknown');

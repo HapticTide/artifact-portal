@@ -29,7 +29,7 @@ import config from './config.js';
 import buildDatabase from './database.js';
 import { readDirSafe, getFileSize, getDiskUsage } from './utils/fs.js';
 import { formatFileSize } from './utils/format.js';
-import { androidMappingCandidates, parseApkFilename } from './androidMapping.js';
+import { androidMappingCandidates, parseApkFilename, androidVersionDirForApk } from './androidMapping.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -259,6 +259,67 @@ class ArtifactManager {
     }
 
     /**
+     * 迁移旧扁平结构的 APK 文件到版本子目录
+     * 旧结构：android/<branch>/xxx.apk（直接放在分支目录下）
+     * 新结构：android/<branch>/<version>.<build>/xxx.apk
+     *
+     * 同时迁移旧结构的 mapping 文件：
+     * 旧结构：android/<branch>/mapping/xxx.mapping.txt
+     * 新结构：android/<branch>/<version>.<build>/xxx.mapping.zip（不做格式转换，仅移动为 .mapping.zip）
+     *
+     * @param {string} branchPath 分支目录绝对路径
+     */
+    async _migrateLegacyFlatApks(branchPath) {
+        let entries;
+        try {
+            entries = fs.readdirSync(branchPath);
+        } catch {
+            return;
+        }
+        const apkFiles = entries.filter(f => f.endsWith('.apk'));
+
+        if (apkFiles.length === 0) return;
+
+        for (const apkFile of apkFiles) {
+            const apkPath = join(branchPath, apkFile);
+            try {
+                const fileStat = fs.statSync(apkPath);
+                if (!fileStat.isFile()) continue;
+            } catch {
+                continue;
+            }
+
+            const versionDir = androidVersionDirForApk(apkFile);
+            if (versionDir === 'unknown') {
+                // 文件名无法解析出版本号，跳过迁移但记录日志
+                console.warn(`[migration] 无法解析版本号，跳过迁移: ${apkFile}`);
+                continue;
+            }
+
+            const targetDir = join(branchPath, versionDir);
+            const targetPath = join(targetDir, apkFile);
+
+            // 目标已存在则跳过（避免覆盖）
+            if (fs.existsSync(targetPath)) continue;
+
+            fs.mkdirSync(targetDir, { recursive: true });
+            fs.renameSync(apkPath, targetPath);
+            console.log(`[migration] 已迁移 APK: ${apkFile} -> ${versionDir}/${apkFile}`);
+
+            // 尝试迁移旧 mapping 目录下的对应文件
+            const apkBase = apkFile.slice(0, -'.apk'.length);
+            const legacyMappingPath = join(branchPath, 'mapping', `${apkBase}.mapping.txt`);
+            if (fs.existsSync(legacyMappingPath)) {
+                const targetMappingPath = join(targetDir, `${apkBase}.mapping.zip`);
+                if (!fs.existsSync(targetMappingPath)) {
+                    fs.renameSync(legacyMappingPath, targetMappingPath);
+                    console.log(`[migration] 已迁移 mapping: mapping/${apkBase}.mapping.txt -> ${versionDir}/${apkBase}.mapping.zip`);
+                }
+            }
+        }
+    }
+
+    /**
      * 扫描 Android 构建
      * 目录结构：android/{branch}/{version}/xxx.apk
      * @returns {Promise<Array>}
@@ -276,6 +337,11 @@ class ArtifactManager {
             const branchPath = join(androidDir, branch);
             const stat = fs.statSync(branchPath);
             if (!stat.isDirectory()) continue;
+
+            // --- 旧扁平结构迁移 ---
+            // 线上可能残留 android/<branch>/*.apk（无版本子目录），
+            // 自动迁移到 android/<branch>/<version>.<build>/ 下，避免静默丢失。
+            await this._migrateLegacyFlatApks(branchPath);
 
             const versions = await readDirSafe(branchPath);
 
