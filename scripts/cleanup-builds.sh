@@ -9,6 +9,7 @@
 #   builds/android/<branch>/<version>.<build>/*.apk
 #   builds/android/<branch>/<version>.<build>/*.mapping.zip
 #     （与对应 APK 同目录，随 APK 一起清理，APK 不存在的 mapping 视为孤立文件删除）
+#   builds/android/<branch>/mapping/*.mapping.txt  （旧结构遗留，直接回收）
 # ============================================
 
 set -euo pipefail
@@ -44,13 +45,6 @@ MAX_PER_BRANCH="${MAX_PER_BRANCH:-50}"
 MAX_AGE_DAYS="${MAX_AGE_DAYS:-$(read_env_value MAX_AGE_DAYS)}"
 MAX_AGE_DAYS="${MAX_AGE_DAYS:-30}"
 DRY_RUN="${DRY_RUN:-true}"
-
-# 记录本轮"计划删除"的 APK 路径（每行一个）。
-# 孤立 mapping 判断时同时参考此集合，使 DRY_RUN 预览与真实运行的删除范围一致：
-# 真实运行时 APK 已被删除，靠文件是否存在即可判断；
-# DRY_RUN 时 APK 仍在磁盘上，必须借助此集合才能预告随之删除的 mapping。
-PLANNED_APK_DELETIONS="$(mktemp)"
-trap 'rm -f "$PLANNED_APK_DELETIONS"' EXIT
 
 # 记录本轮"计划删除"的 APK 路径（每行一个）。
 # 孤立 mapping 判断时同时参考此集合，使 DRY_RUN 预览与真实运行的删除范围一致：
@@ -96,11 +90,6 @@ file_mtime() {
 delete_file() {
     local file="$1"
     local reason="$2"
-
-    # 记录被删除的 APK，供后续孤立 mapping 判断使用（DRY_RUN 下也记录）。
-    case "$file" in
-        *.apk) printf '%s\n' "$file" >> "$PLANNED_APK_DELETIONS" ;;
-    esac
 
     # 记录被删除的 APK，供后续孤立 mapping 判断使用（DRY_RUN 下也记录）。
     case "$file" in
@@ -176,7 +165,25 @@ cleanup_platform() {
     cleanup_empty_dirs "$platform_dir"
 }
 
-# 删除没有对应 APK 的 mapping 文件
+# 清理旧结构遗留的 mapping 文件：android/<branch>/mapping/*.mapping.txt
+# 这些文件在新版本中已不再展示，直接全部回收。
+cleanup_legacy_mappings() {
+    local android_dir="$BUILDS_DIR/android"
+
+    if [ ! -d "$android_dir" ]; then
+        return 0
+    fi
+
+    find "$android_dir" -mindepth 2 -maxdepth 2 -type d -name 'mapping' -print0 |
+        while IFS= read -r -d '' mapping_dir; do
+            find "$mapping_dir" -type f -name '*.mapping.txt' -print0 |
+                while IFS= read -r -d '' mapping_file; do
+                    delete_file "$mapping_file" "legacy mapping"
+                done
+        done
+}
+
+# 删除没有对应 APK 的 mapping 文件（新结构）
 # mapping 与 APK 同放在 android/<branch>/<version>/ 目录下，
 # 按文件名去掉 .mapping.zip 后拼出同目录下的 .apk 路径即可判断是否孤立。
 cleanup_orphan_mappings() {
@@ -186,7 +193,7 @@ cleanup_orphan_mappings() {
         return 0
     fi
 
-    find "$android_dir" -type f -name '*.mapping.zip' -print0 |
+    find "$android_dir" -mindepth 3 -maxdepth 3 -type f -name '*.mapping.zip' -print0 |
         while IFS= read -r -d '' mapping_file; do
             local version_dir base apk_path
             version_dir="$(dirname "$mapping_file")"
@@ -218,7 +225,7 @@ fi
 
 cleanup_platform "ios" "*.ipa"
 cleanup_platform "android" "*.apk"
-cleanup_orphan_mappings
+cleanup_legacy_mappings
 cleanup_orphan_mappings
 
 log_info "清理完成"
