@@ -121,27 +121,33 @@
                             <a id="android-download-btn" class="btn btn-primary" href="#" download>
                                 点击下载 APK
                             </a>
-                            <!-- mapping 文件（存在时由 JS 显示） -->
-                            <a id="android-mapping-btn" class="btn btn-mini btn-secondary" href="#" download hidden>
-                                下载 mapping
-                            </a>
                         </div>
-                        <!-- 次要操作行：扫码按钮 + 复制链接 -->
+                        <!-- 次要操作行：扫码按钮 + 复制链接 + mapping 下载（存在时由 JS 显示） -->
                         <div class="platform-secondary-actions">
                             <button class="qr-toggle-btn" data-target="android-qr-content">
                                 <span>扫码下载</span>
                                 <span class="qr-toggle-icon">▼</span>
                             </button>
-                            <button id="android-copy-btn" class="btn-link" data-url="">
-                                复制下载链接
-                            </button>
+                            <div class="platform-link-actions">
+                                <button id="android-copy-btn" class="btn-link" data-url="">
+                                    复制下载链接
+                                </button>
+                                <a id="android-mapping-btn" class="btn-link" href="#" download hidden>
+                                    下载 mapping
+                                </a>
+                            </div>
                         </div>
                         <!-- 二维码内容（独立容器，展开收起不影响上方布局） -->
                         <div id="android-qr-content" class="qr-content collapsed">
                             <img id="android-qr" class="qr-code" alt="Android 下载二维码">
-                            <button class="btn-link desktop-copy-btn" data-copy-from="android-copy-btn">
-                                复制下载链接
-                            </button>
+                            <div class="desktop-qr-actions">
+                                <button class="btn-link desktop-copy-btn" data-copy-from="android-copy-btn">
+                                    复制下载链接
+                                </button>
+                                <a id="android-mapping-desktop-btn" class="btn-link" href="#" download hidden>
+                                    下载 mapping
+                                </a>
+                            </div>
                         </div>
                     </div>
                 </div>

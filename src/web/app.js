@@ -82,6 +82,7 @@ class ArtifactPortal {
             androidQr: document.getElementById('android-qr'),
             androidDownloadBtn: document.getElementById('android-download-btn'),
             androidMappingBtn: document.getElementById('android-mapping-btn'),
+            androidMappingDesktopBtn: document.getElementById('android-mapping-desktop-btn'),
             androidCopyBtn: document.getElementById('android-copy-btn'),
 
             // 移动端全局平台切换
@@ -862,20 +863,22 @@ class ArtifactPortal {
             this.els.androidDownloadBtn.href = downloadUrl;
             this.els.androidCopyBtn.dataset.url = downloadUrl;
 
-            // mapping 文件：仅在存在时显示
-            if (this.els.androidMappingBtn) {
-                const mappingUrl = this.getMappingUrl(android);
+            // mapping 文件：仅在存在时显示（移动端次要操作行 + 桌面端二维码下方，各一个按钮）
+            const mappingUrl = this.getMappingUrl(android);
+            const mappingText = mappingUrl
+                ? (android.mappingSize ? `下载 mapping (${android.mappingSize})` : '下载 mapping')
+                : '';
+            [this.els.androidMappingBtn, this.els.androidMappingDesktopBtn].forEach(btn => {
+                if (!btn) return;
                 if (mappingUrl) {
-                    this.els.androidMappingBtn.href = mappingUrl;
-                    this.els.androidMappingBtn.textContent = android.mappingSize
-                        ? `下载 mapping (${android.mappingSize})`
-                        : '下载 mapping';
-                    this.els.androidMappingBtn.hidden = false;
+                    btn.href = mappingUrl;
+                    btn.textContent = mappingText;
+                    btn.hidden = false;
                 } else {
-                    this.els.androidMappingBtn.removeAttribute('href');
-                    this.els.androidMappingBtn.hidden = true;
+                    btn.removeAttribute('href');
+                    btn.hidden = true;
                 }
-            }
+            });
         }
 
         // 设置平台区域可见性
@@ -1217,14 +1220,13 @@ class ArtifactPortal {
                 ? `<button class="btn btn-primary expand-install-btn" data-url="${actionUrl}">${actionText}</button>`
                 : `<a href="${actionUrl}" class="btn btn-primary expand-download-btn" download>${actionText}</a>`
             }
-                ${mappingUrl
-                ? `<a href="${mappingUrl}" class="btn btn-mini btn-secondary expand-mapping-btn" download>下载 mapping${platformData.mappingSize ? ` (${platformData.mappingSize})` : ''}</a>`
-                : ''
-            }
                 <div class="expand-link-actions">
                     <button class="btn-link expand-copy-btn" data-url="${actionUrl}">${copyText}</button>
                     ${platform === 'ios'
                     ? `<a href="${ipaDownloadUrl}" class="btn-link expand-ipa-download-btn" download>下载 IPA</a>`
+                    : ''}
+                    ${mappingUrl
+                    ? `<a href="${mappingUrl}" class="btn-link expand-mapping-btn" download>下载 mapping${platformData.mappingSize ? ` (${platformData.mappingSize})` : ''}</a>`
                     : ''}
                 </div>
             </div>
@@ -1536,13 +1538,15 @@ class ArtifactPortal {
                         <a href="${downloadUrl}" class="btn btn-primary detail-download-btn" download>
                             下载 APK
                         </a>
-                        ${mappingUrl
-                    ? `<a href="${mappingUrl}" class="btn btn-mini btn-secondary detail-mapping-btn" download>下载 mapping${android.mappingSize ? ` (${android.mappingSize})` : ''}</a>`
+                        <div class="detail-link-actions">
+                            <button class="btn-link detail-copy-btn" data-url="${downloadUrl}">
+                                复制下载链接
+                            </button>
+                            ${mappingUrl
+                    ? `<a href="${mappingUrl}" class="btn-link detail-mapping-btn" download>下载 mapping${android.mappingSize ? ` (${android.mappingSize})` : ''}</a>`
                     : ''
                 }
-                        <button class="btn-link detail-copy-btn" data-url="${downloadUrl}">
-                            复制下载链接
-                        </button>
+                        </div>
                     </div>
                 </div>
             `;

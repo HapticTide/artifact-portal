@@ -22,6 +22,7 @@ import {
     validateAndroidUploadFile,
     validateIosUploadFile,
 } from './upload.js';
+import { apkFilenameHasVersionBuild } from './androidMapping.js';
 
 
 const router = Router();
@@ -199,6 +200,15 @@ router.post('/api/upload/android', async (req, res) => {
             });
         }
 
+        // 文件名必须同时携带版本号与 build 号（如 xxx_v1.2.0.123_...apk），
+        // 否则无法确定存储目录，构建会在页面上"消失"却无法排查原因
+        if (!apkFilenameHasVersionBuild(uploadFilename)) {
+            return res.status(400).json({
+                success: false,
+                error: 'APK 文件名必须包含版本号和 build 号（格式如 {AppName}_v{version}.{build}_..），否则无法归档到对应版本目录',
+            });
+        }
+
         const contentLength = parseInt(req.get('content-length') || '0');
         if (contentLength > config.uploadMaxBytes) {
             return res.status(413).json({
@@ -259,11 +269,11 @@ router.post('/api/upload/android', async (req, res) => {
 
 /**
  * POST /api/upload/android/mapping - 上传 Android mapping（混淆映射）文件
- * Query: branch, apk（对应的 APK 文件名）, filename（可选，仅支持 .txt，默认 mapping.txt）
+ * Query: branch, apk（对应的 APK 文件名）, filename（可选，仅支持 .zip，默认 mapping.zip）
  * Auth: Authorization: Bearer <UPLOAD_TOKEN>
  *
- * 存储路径：android/<branch>/mapping/<apk 文件名去掉 .apk>.mapping.<txt|zip>
- * 必须先上传对应的 APK，否则返回 404。
+ * 存储路径：android/<branch>/<version>/<apk 文件名去掉 .apk>.mapping.zip
+ * version 从 apk 文件名解析，与对应 APK 同目录。必须先上传对应的 APK，否则返回 404。
  */
 router.post('/api/upload/android/mapping', async (req, res) => {
     let tempPath = null;
@@ -285,7 +295,7 @@ router.post('/api/upload/android/mapping', async (req, res) => {
 
         const { branch, apk } = req.query;
         const apkFilename = apk || req.get('x-artifact-apk');
-        const uploadFilename = req.query.filename || req.get('x-artifact-filename') || 'mapping.txt';
+        const uploadFilename = req.query.filename || req.get('x-artifact-filename') || 'mapping.zip';
 
         if (!branch || !apkFilename) {
             return res.status(400).json({
@@ -301,10 +311,18 @@ router.post('/api/upload/android/mapping', async (req, res) => {
             });
         }
 
+        // apk 参数同样决定 mapping 的存储目录，必须携带版本号和 build 号
+        if (!apkFilenameHasVersionBuild(apkFilename)) {
+            return res.status(400).json({
+                success: false,
+                error: 'apk 参数文件名必须包含版本号和 build 号（格式如 {AppName}_v{version}.{build}_..），否则无法归档到对应版本目录',
+            });
+        }
+
         if (!validateAndroidMappingUploadFile(uploadFilename)) {
             return res.status(400).json({
                 success: false,
-                error: 'mapping 文件只允许 .txt 格式',
+                error: 'mapping 文件只允许 .zip 或 .txt 格式',
             });
         }
 
@@ -670,7 +688,7 @@ router.get('/latest', async (req, res) => {
  * GET /download/* - 下载构建文件
  * 支持路径格式：
  *   /download/iOS/{branch}/{version}/{file}
- *   /download/android/{branch}/{file}
+ *   /download/android/{branch}/{version}/{file}
  */
 router.get('/download/*', async (req, res) => {
     try {

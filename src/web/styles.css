@@ -572,8 +572,17 @@ body {
     transition: transform var(--transition);
 }
 
+
 .platform-secondary-actions .qr-toggle-btn.expanded .qr-toggle-icon {
     transform: rotate(180deg);
+}
+
+
+/* 次要操作行右侧：复制链接 + mapping 下载 并排（参考 iOS 桌面端布局） */
+.platform-link-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-md);
 }
 
 /* 独立的二维码内容区域 */
@@ -653,9 +662,10 @@ body {
     }
 }
 
-/* 移动端：复制链接居右，隐藏桌面端复制按钮 */
+/* 移动端：复制链接（及 mapping 下载）居右，隐藏桌面端复制按钮 */
 @media (max-width: 768px) {
-    .platform-secondary-actions .btn-link {
+    .platform-secondary-actions .btn-link,
+    .platform-secondary-actions .platform-link-actions {
         margin-left: auto;
     }
 
@@ -1713,6 +1723,13 @@ body {
 
 .detail-actions .btn-link {
     font-size: 13px;
+}
+
+/* 复制链接 + mapping 下载 并排显示 */
+.detail-link-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-md);
 }
 
 /* 旧版样式保留（兼容） */
