@@ -97,7 +97,6 @@ artifact-portal/
 | `POST /api/upload/ios` | 上传 iOS IPA 文件 |
 | `POST /api/upload/android` | 上传 Android APK 文件 |
 | `POST /api/upload/android/mapping` | 上传 Android mapping（混淆映射）文件 |
-| `POST /api/upload/android/mapping` | 上传 Android mapping（混淆映射）文件 |
 | `GET /qr?text=...` | 生成二维码 |
 | `GET /download/:dir/:file` | 下载构建文件 |
 
