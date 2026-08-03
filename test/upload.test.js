@@ -11,6 +11,7 @@ import {
 import {
     androidMappingCandidates,
     androidMappingFilenameForApk,
+    androidVersionDirForApk,
     apkFilenameHasVersionBuild,
 } from '../src/server/androidMapping.js';
 
@@ -159,4 +160,15 @@ test('buildAndroidMappingUploadTarget rejects invalid apk filename', () => {
         apkFilename: 'not-an-apk.txt',
         filename: 'mapping.zip',
     }), /\.apk/);
+});
+
+test('androidVersionDirForApk returns version.build for valid filenames', () => {
+    assert.equal(androidVersionDirForApk('IMWE_v1.2.0.123_01_01_00_00_online-release.apk'), '1.2.0.123');
+    assert.equal(androidVersionDirForApk('App_v0.9.1.7_03_15_10_30_online-release.apk'), '0.9.1.7');
+});
+
+test('androidVersionDirForApk falls back to unknown for unparseable filenames', () => {
+    assert.equal(androidVersionDirForApk('random-app.apk'), 'unknown');
+    assert.equal(androidVersionDirForApk('no-version-here.apk'), 'unknown');
+    assert.equal(androidVersionDirForApk(''), 'unknown');
 });
