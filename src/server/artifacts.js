@@ -3,11 +3,12 @@
  * 
  * 支持的目录结构：
  *   builds/
- *     iOS/
+ *     ios/
  *       {branch}/
- *         {version}/
- *           {AppName}-{version}({build}).ipa
- *           manifest.plist (可选，不存在时动态生成)
+ *         {env}/
+ *           {version}/
+ *             {AppName}-{version}({build}).ipa
+ *             manifest.plist (可选，不存在时动态生成)
  *     android/
  *       {branch}/
  *         {version}.{build}/
@@ -30,8 +31,12 @@ import buildDatabase from './database.js';
 import { readDirSafe, getFileSize, getDiskUsage } from './utils/fs.js';
 import { formatFileSize } from './utils/format.js';
 import { androidMappingCandidates, parseApkFilename, androidVersionDirForApk } from './androidMapping.js';
+import { buildIosArtifactId, resolveIosEnv } from './upload.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+
+/** 已知 iOS 身份 env 目录名（白名单；其余视为旧布局 version 目录） */
+const IOS_ENV_WHITELIST = new Set(['pre', 'production', 'sandbox']);
 
 /**
  * 从 iOS IPA 文件名解析版本信息
@@ -143,8 +148,79 @@ class ArtifactManager {
     }
 
     /**
-     * 扫描 iOS 构建
-     * 目录结构：iOS/{branch}/{version}/xxx.ipa
+     * 扫描单个 version 目录下的 IPA，写入 builds。
+     * @param {object} opts
+     * @param {string} opts.branch
+     * @param {string|null} opts.env pre|production|sandbox；旧布局传 null
+     * @param {string|null} opts.storageEnv 物理目录身份，用于兼容目录去重
+     * @param {string} opts.versionDir 目录名（版本号）
+     * @param {string} opts.versionPath 绝对路径
+     * @param {string} opts.relativeVersionPrefix 相对路径前缀（含 env 或不含）
+     */
+    async _collectIosVersionDir({
+        branch,
+        env,
+        storageEnv,
+        versionDir,
+        versionPath,
+        relativeVersionPrefix,
+        builds,
+    }) {
+        const files = fs.readdirSync(versionPath);
+        const ipaFiles = files.filter(f => f.endsWith('.ipa'));
+
+        for (const ipaFile of ipaFiles) {
+            const ipaPath = join(versionPath, ipaFile);
+            const parsed = parseIpaFilename(ipaFile);
+            if (!parsed) continue;
+
+            const fileStat = fs.statSync(ipaPath);
+            const fileSize = fileStat.size;
+            const mtime = fileStat.mtime;
+
+            const manifestPath = join(versionPath, 'manifest.plist');
+            const hasStaticManifest = fs.existsSync(manifestPath);
+
+            let bundleId = null;
+            let displayName = null;
+            try {
+                const infoPlist = await parseIpaInfoPlist(ipaPath);
+                bundleId = infoPlist.bundleId;
+                displayName = infoPlist.displayName;
+            } catch (e) {
+                // 解析失败，使用配置中的默认值
+            }
+
+            const resolvedBundleId = bundleId || config.iosBundleId;
+            const resolvedEnv = resolveIosEnv(env, resolvedBundleId);
+            const id = buildIosArtifactId(branch, resolvedEnv, parsed.version, parsed.build);
+            builds.push({
+                platform: 'ios',
+                branch,
+                // 优先目录 env；若旧布局缺 env，用 bundleId 推断 pre
+                env: resolvedEnv,
+                storageEnv,
+                hasLegacySource: storageEnv === null,
+                version: parsed.version,
+                build: parsed.build,
+                appName: displayName || parsed.appName,
+                bundleId: resolvedBundleId,
+                filename: ipaFile,
+                relativePath: `${relativeVersionPrefix}/${ipaFile}`,
+                absolutePath: ipaPath,
+                manifestPath: hasStaticManifest ? `${relativeVersionPrefix}/manifest.plist` : null,
+                hasStaticManifest,
+                size: fileSize,
+                time: mtime.toISOString(),
+                id,
+            });
+        }
+    }
+
+    /**
+     * 扫描 iOS 构建。
+     * 新目录：ios/{branch}/{env}/{version}/xxx.ipa（env ∈ pre|production；兼容 sandbox）
+     * 旧目录：ios/{branch}/{version}/xxx.ipa → 优先按 Bundle ID 推断身份
      * @returns {Promise<Array>}
      */
     async _scanIosBuilds() {
@@ -161,68 +237,66 @@ class ArtifactManager {
             const stat = fs.statSync(branchPath);
             if (!stat.isDirectory()) continue;
 
-            const versions = await readDirSafe(branchPath);
+            const children = await readDirSafe(branchPath);
 
-            for (const version of versions) {
-                const versionPath = join(branchPath, version);
-                const vstat = fs.statSync(versionPath);
-                if (!vstat.isDirectory()) continue;
+            for (const child of children) {
+                const childPath = join(branchPath, child);
+                const cstat = fs.statSync(childPath);
+                if (!cstat.isDirectory()) continue;
 
-                // 使用 readdirSync 获取所有文件（readDirSafe 只返回目录）
-                const files = fs.readdirSync(versionPath);
-                const ipaFiles = files.filter(f => f.endsWith('.ipa'));
-
-                for (const ipaFile of ipaFiles) {
-                    const ipaPath = join(versionPath, ipaFile);
-                    const parsed = parseIpaFilename(ipaFile);
-
-                    if (!parsed) continue;
-
-                    const fileStat = fs.statSync(ipaPath);
-                    const fileSize = fileStat.size;
-                    const mtime = fileStat.mtime;
-
-                    // 检查是否有静态 manifest.plist
-                    const manifestPath = join(versionPath, 'manifest.plist');
-                    const hasStaticManifest = fs.existsSync(manifestPath);
-
-                    // 从 IPA 的 Info.plist 解析 bundleId 和 displayName
-                    let bundleId = null;
-                    let displayName = null;
-                    try {
-                        const infoPlist = await parseIpaInfoPlist(ipaPath);
-                        bundleId = infoPlist.bundleId;
-                        displayName = infoPlist.displayName;
-                    } catch (e) {
-                        // 解析失败，使用配置中的默认值
+                if (IOS_ENV_WHITELIST.has(child)) {
+                    // 新布局：磁盘目录名 child 可能是 sandbox 历史别名。
+                    const versions = await readDirSafe(childPath);
+                    for (const version of versions) {
+                        const versionPath = join(childPath, version);
+                        const vstat = fs.statSync(versionPath);
+                        if (!vstat.isDirectory()) continue;
+                        await this._collectIosVersionDir({
+                            branch,
+                            env: child,
+                            storageEnv: child,
+                            versionDir: version,
+                            versionPath,
+                            // 下载路径必须与真实磁盘目录一致（sandbox 目录不能改写成 pre）
+                            relativeVersionPrefix: `ios/${branch}/${child}/${version}`,
+                            builds,
+                        });
                     }
-
-                    builds.push({
-                        platform: 'ios',
+                } else {
+                    // 旧布局：child 即 version；env 由 bundleId 再归一（缺省 production）
+                    await this._collectIosVersionDir({
                         branch,
-                        version: parsed.version,
-                        build: parsed.build,
-                        // 优先使用 Info.plist 解析的 displayName，其次是文件名解析的 appName
-                        appName: displayName || parsed.appName,
-                        bundleId: bundleId || config.iosBundleId,
-                        filename: ipaFile,
-                        // 相对路径（用于下载 URL）
-                        relativePath: `ios/${branch}/${version}/${ipaFile}`,
-                        absolutePath: ipaPath,
-                        manifestPath: hasStaticManifest ? `ios/${branch}/${version}/manifest.plist` : null,
-                        hasStaticManifest,
-                        size: fileSize,
-                        time: mtime.toISOString(),
-                        // 唯一标识符
-                        id: `ios_${branch}_${parsed.version}_${parsed.build}`,
+                        env: null,
+                        storageEnv: null,
+                        versionDir: child,
+                        versionPath: childPath,
+                        relativeVersionPrefix: `ios/${branch}/${child}`,
+                        builds,
                     });
                 }
             }
         }
 
-        // 按时间倒序排序
-        builds.sort((a, b) => new Date(b.time) - new Date(a.time));
-        return builds;
+        // sandbox 是 pre 的历史物理目录别名。迁移期两者可能短暂并存，
+        // 同一 branch/env/version/build 只保留 canonical pre 目录，避免详情 ID 冲突。
+        const storagePriority = { pre: 3, production: 3, sandbox: 2 };
+        const uniqueBuilds = new Map();
+        for (const build of builds) {
+            const existing = uniqueBuilds.get(build.id);
+            const priority = storagePriority[build.storageEnv] || 1;
+            const existingPriority = storagePriority[existing?.storageEnv] || 1;
+            if (!existing || priority > existingPriority) {
+                if (existing?.hasLegacySource) {
+                    build.hasLegacySource = true;
+                }
+                uniqueBuilds.set(build.id, build);
+            } else if (build.hasLegacySource) {
+                existing.hasLegacySource = true;
+            }
+        }
+
+        return Array.from(uniqueBuilds.values())
+            .sort((a, b) => new Date(b.time) - new Date(a.time));
     }
 
     /**
@@ -416,14 +490,41 @@ class ArtifactManager {
         const allBuilds = [];
         const existingDirs = new Set();
 
-        // 收集 iOS 构建
+        // 旧 ID 不含 env。同一 version/build 同时出现双身份时，只迁移一次：
+        // 磁盘旧布局的实际身份优先；无旧布局可判断时沿用历史默认 production。
+        const legacyMigrationTargets = new Map();
         for (const ios of this._iosCache) {
-            const dir = `ios_${ios.branch}_${ios.version}_${ios.build}`;
+            const key = `${ios.branch}\0${ios.version}\0${ios.build}`;
+            const priority = ios.hasLegacySource ? 3 : (ios.env === 'production' ? 2 : 1);
+            const existing = legacyMigrationTargets.get(key);
+            if (!existing || priority > existing.priority) {
+                legacyMigrationTargets.set(key, { ios, priority });
+            }
+        }
+        for (const { ios } of legacyMigrationTargets.values()) {
+            const env = ios.env || 'production';
+            // 旧 ID 历史默认属于 production。仅有新布局 pre 时无法证明旧行身份，
+            // 保留旧行并让 cleanupMissing 软删除，避免把 production 历史改写成 pre。
+            if (!ios.hasLegacySource && env !== 'production') continue;
+            buildDatabase.migrateLegacyIosBuild({
+                branch: ios.branch,
+                env,
+                version: ios.version,
+                build: ios.build,
+                dir: buildIosArtifactId(ios.branch, env, ios.version, ios.build),
+            });
+        }
+
+        // 收集 iOS 构建（dir/id 同源，必须带 env）
+        for (const ios of this._iosCache) {
+            const env = ios.env || 'production';
+            const dir = buildIosArtifactId(ios.branch, env, ios.version, ios.build);
             existingDirs.add(dir);
             allBuilds.push({
                 dir,
                 platform: 'ios',
                 branch: ios.branch,
+                env,
                 version: ios.version,
                 build: ios.build,
                 size: ios.size,
@@ -440,6 +541,7 @@ class ArtifactManager {
                 dir,
                 platform: 'android',
                 branch: android.branch,
+                env: 'production',
                 version: android.version,
                 build: android.build,
                 size: android.size,
@@ -467,7 +569,7 @@ class ArtifactManager {
      * @param {string} options.platform - 按平台过滤（ios/android）
      */
     async getBuilds(options = {}) {
-        const { days = 3, skipDays = 0, branch = null, platform = null } = options;
+        const { days = 3, skipDays = 0, branch = null, platform = null, env = null } = options;
 
         await this._ensureCache();
 
@@ -478,6 +580,7 @@ class ArtifactManager {
         if (!platform || platform === 'ios') {
             for (const ios of this._iosCache) {
                 if (branch && ios.branch !== branch) continue;
+                if (env && ios.env !== env) continue;
                 allBuilds.push(this._formatIosBuild(ios));
             }
         }
@@ -545,7 +648,7 @@ class ArtifactManager {
      * @returns {Promise<{ios: object|null, android: object|null}>}
      */
     async getLatestByPlatform(options = {}) {
-        const { branch = null } = options;
+        const { branch = null, env = 'production' } = options;
 
         await this._ensureCache();
 
@@ -554,6 +657,7 @@ class ArtifactManager {
         if (branch) {
             iosBuilds = iosBuilds.filter(b => b.branch === branch);
         }
+        iosBuilds = iosBuilds.filter(b => b.env === env);
         const latestIos = iosBuilds.length > 0 ? this._formatIosBuild(iosBuilds[0]) : null;
 
         // 过滤并获取 Android 最新
@@ -576,7 +680,7 @@ class ArtifactManager {
         await this._ensureCache();
 
         // 查找 iOS
-        const ios = this._iosCache.find(b => b.id === buildId);
+        const ios = this._findIosBuild(buildId);
         if (ios) return this._formatIosBuild(ios);
 
         // 查找 Android
@@ -608,7 +712,7 @@ class ArtifactManager {
      * 获取所有分支（直接从文件系统读取目录）
      */
     async getBranches() {
-        const iosDir = join(this.buildsDir, 'iOS');
+        const iosDir = join(this.buildsDir, 'ios');
         const androidDir = join(this.buildsDir, 'android');
 
         // 直接读取文件系统中的分支目录
@@ -670,6 +774,8 @@ class ArtifactManager {
      * 格式化 iOS 构建（兼容前端）
      */
     _formatIosBuild(ios) {
+        const bundleId = ios.bundleId || config.iosBundleId || '';
+        const env = resolveIosEnv(ios.env, bundleId);
         return {
             dir: ios.id,
             id: ios.id,
@@ -680,7 +786,8 @@ class ArtifactManager {
                     version: ios.version,
                     build: ios.build,
                     branch: ios.branch,
-                    bundleId: ios.bundleId || config.iosBundleId || '',
+                    env,
+                    bundleId,
                     appName: ios.appName || '', // 从 IPA 解析的应用名称
                     // 下载路径
                     ipa: ios.relativePath,
@@ -727,7 +834,24 @@ class ArtifactManager {
      */
     async getIosBuildInfo(buildId) {
         await this._ensureCache();
-        return this._iosCache.find(b => b.id === buildId) || null;
+        return this._findIosBuild(buildId);
+    }
+
+    /**
+     * 解析 canonical 或升级前不带 env 的 iOS 构建 ID。
+     * 旧 ID 同时命中双身份时，优先真实旧布局来源，否则按历史默认选择 production。
+     */
+    _findIosBuild(buildId) {
+        const exact = this._iosCache.find(build => build.id === buildId);
+        if (exact) return exact;
+
+        const legacyMatches = this._iosCache.filter(build =>
+            `ios_${build.branch}_${build.version}_${build.build}` === buildId
+        );
+        return legacyMatches.find(build => build.hasLegacySource) ||
+            legacyMatches.find(build => build.env === 'production') ||
+            legacyMatches[0] ||
+            null;
     }
 
     /**

@@ -3,8 +3,10 @@ import assert from 'node:assert/strict';
 import {
     buildAndroidMappingUploadTarget,
     buildAndroidUploadTarget,
+    buildIosArtifactId,
     buildIosUploadTarget,
     validateAndroidMappingUploadFile,
+    normalizeIosEnv,
     validateAndroidUploadFile,
     validateIosUploadFile,
 } from '../src/server/upload.js';
@@ -15,7 +17,7 @@ import {
     apkFilenameHasVersionBuild,
 } from '../src/server/androidMapping.js';
 
-test('buildIosUploadTarget creates safe iOS build path', () => {
+test('buildIosUploadTarget defaults env to production and nests env dir', () => {
     const target = buildIosUploadTarget({
         buildsDir: '/var/lib/artifact-portal/builds',
         branch: 'origin/feat/tank/upload portal',
@@ -23,11 +25,53 @@ test('buildIosUploadTarget creates safe iOS build path', () => {
         filename: 'IMWE-1.2.0(123).ipa',
     });
 
-    assert.equal(target.relativePath, 'ios/feat-tank-upload-portal/1.2.0/IMWE-1.2.0(123).ipa');
+    assert.equal(target.env, 'production');
+    assert.equal(
+        target.relativePath,
+        'ios/feat-tank-upload-portal/production/1.2.0/IMWE-1.2.0(123).ipa'
+    );
     assert.equal(
         target.absolutePath,
-        '/var/lib/artifact-portal/builds/ios/feat-tank-upload-portal/1.2.0/IMWE-1.2.0(123).ipa'
+        '/var/lib/artifact-portal/builds/ios/feat-tank-upload-portal/production/1.2.0/IMWE-1.2.0(123).ipa'
     );
+});
+
+test('buildIosUploadTarget accepts sandbox env as pre', () => {
+    const target = buildIosUploadTarget({
+        buildsDir: '/var/lib/artifact-portal/builds',
+        branch: 'dev',
+        version: '1.2.0',
+        filename: 'IMWE-1.2.0(123).ipa',
+        env: 'sandbox',
+    });
+
+    assert.equal(target.env, 'pre');
+    assert.equal(target.relativePath, 'ios/dev/pre/1.2.0/IMWE-1.2.0(123).ipa');
+});
+
+test('buildIosUploadTarget accepts pre env', () => {
+    const target = buildIosUploadTarget({
+        buildsDir: '/var/lib/artifact-portal/builds',
+        branch: 'dev',
+        version: '1.2.0',
+        filename: 'IMWE-1.2.0(123).ipa',
+        env: 'pre',
+    });
+
+    assert.equal(target.env, 'pre');
+    assert.equal(target.relativePath, 'ios/dev/pre/1.2.0/IMWE-1.2.0(123).ipa');
+});
+
+test('normalizeIosEnv rejects invalid values', () => {
+    assert.equal(normalizeIosEnv(undefined), 'production');
+    assert.equal(normalizeIosEnv('sandbox'), 'pre');
+    assert.equal(normalizeIosEnv('pre'), 'pre');
+    assert.equal(normalizeIosEnv('production'), 'production');
+    assert.throws(() => normalizeIosEnv('staging'), /pre \/ production/);
+});
+
+test('buildIosArtifactId encodes env', () => {
+    assert.equal(buildIosArtifactId('dev', 'pre', '1.2.0', '123'), 'ios_dev_pre_1.2.0_123');
 });
 
 test('validateIosUploadFile only accepts ipa files', () => {

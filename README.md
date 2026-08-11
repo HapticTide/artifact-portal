@@ -89,10 +89,10 @@ artifact-portal/
 |------|------|
 | `GET /` | 主页面 |
 | `GET /latest` | 跳转到最新构建 |
-| `GET /latest?platform=ios` | 跳转到最新 iOS 构建 |
+| `GET /latest?platform=ios&env=pre` | 跳转到指定身份的最新 iOS 构建（缺省 production） |
 | `GET /latest?branch=main` | 跳转到指定分支的最新构建 |
 | `GET /api/builds` | 获取构建列表 |
-| `GET /api/builds/latest` | 获取最新构建详情 |
+| `GET /api/builds/latest?env=production` | 获取指定身份的最新构建详情（缺省 production） |
 | `GET /api/health` | 健康检查 |
 | `POST /api/upload/ios` | 上传 iOS IPA 文件 |
 | `POST /api/upload/android` | 上传 Android APK 文件 |
@@ -106,8 +106,12 @@ artifact-portal/
 curl -X POST \
   -H "Authorization: Bearer $UPLOAD_TOKEN" \
   --data-binary "@/path/to/IMWE-1.2.0(123).ipa" \
-  "http://127.0.0.1:8088/api/upload/ios?branch=origin/dev&version=1.2.0&filename=IMWE-1.2.0%28123%29.ipa"
+  "http://127.0.0.1:8088/api/upload/ios?branch=origin/dev&env=pre&version=1.2.0&filename=IMWE-1.2.0%28123%29.ipa"
 ```
+
+`env` 对外只使用 `pre` / `production`；兼容读取历史 `sandbox` 值并归一为 `pre`。
+省略 `env` 时按 `production` 处理。IPA 存储路径为
+`ios/<branch>/<env>/<version>/<filename>`。
 
 ### 上传 Android APK
 
@@ -246,7 +250,7 @@ sudo systemctl status artifact-portal
 使用清理脚本定期删除旧构建。脚本支持当前上传目录结构：
 
 ```text
-builds/ios/<branch>/<version>/*.ipa
+builds/ios/<branch>/<env>/<version>/*.ipa
 builds/android/<branch>/<version>.<build>/*.apk
 builds/android/<branch>/<version>.<build>/*.mapping.zip
 ```
@@ -261,7 +265,7 @@ DRY_RUN=false MAX_BUILDS=10 MAX_AGE_DAYS=30 ./scripts/cleanup-builds.sh
 
 清理规则：
 
-- `MAX_BUILDS`：每个平台、每个分支保留的最大包数量，默认 `50`
+- `MAX_BUILDS`：iOS 每个分支/身份、Android 每个分支保留的最大包数量，默认 `50`
 - `MAX_PER_BRANCH`：与 `MAX_BUILDS` 等价，优先级更高
 - `MAX_AGE_DAYS`：超过指定天数的包会被删除，默认 `30`
 - `BUILDS_DIR`：构建目录，优先读取环境变量，其次读取 `.env`

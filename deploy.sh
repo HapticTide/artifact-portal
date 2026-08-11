@@ -79,6 +79,7 @@ EXCLUDE_LIST=(
     "*.log"
     ".server.pid"
     ".DS_Store"
+    ".od-skills"
     "sample/builds"
     "deploy.local"
 )

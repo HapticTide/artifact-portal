@@ -18,6 +18,61 @@ function sanitizeSegment(value, fallback) {
     return normalized || fallback;
 }
 
+/**
+ * 将内部扫描结果归一为对外 iOS 身份。
+ * 显式目录身份优先；旧两层目录没有身份时，允许由 Bundle ID 推断 Pre。
+ * @param {string|undefined|null} env
+ * @param {string|undefined|null} bundleId
+ * @returns {string} pre | production
+ */
+export function resolveIosEnv(env, bundleId = '') {
+    const normalized = String(env || '').toLowerCase().trim();
+    if (normalized === 'sandbox' || normalized === 'pre') {
+        return 'pre';
+    }
+    if (normalized === 'production' || normalized === 'prod') {
+        return 'production';
+    }
+
+    const normalizedBundleId = String(bundleId || '');
+    if (
+        normalizedBundleId === 'com.imwe.app.pre' ||
+        normalizedBundleId.startsWith('com.imwe.app.pre.')
+    ) {
+        return 'pre';
+    }
+    return 'production';
+}
+
+/**
+ * 校验并规范化 iOS 包身份 env。
+ * 对外词汇 pre / production；兼容历史 sandbox → pre。
+ * @param {string|undefined|null} env
+ * @param {boolean} [required=false]
+ * @returns {string} pre | production
+ */
+export function normalizeIosEnv(env, required = false) {
+    if (env === undefined || env === null || env === '') {
+        if (required) {
+            throw new Error('env 参数必填');
+        }
+        return 'production';
+    }
+    const normalized = String(env).toLowerCase().trim();
+    if (!['pre', 'production', 'sandbox', 'prod'].includes(normalized)) {
+        throw new Error('env 仅接受 pre / production（兼容 sandbox）');
+    }
+    return resolveIosEnv(normalized);
+}
+
+/**
+ * iOS 构建唯一 id / dir 公式（单一来源）。
+ * 形如 ios_${branch}_${env}_${version}_${build}
+ */
+export function buildIosArtifactId(branch, env, version, build) {
+    return `ios_${branch}_${env}_${version}_${build}`;
+}
+
 export function validateIosUploadFile(filename) {
     if (typeof filename !== 'string' || !filename || basename(filename) !== filename) {
         return false;
@@ -34,22 +89,24 @@ export function validateAndroidUploadFile(filename) {
     return filename.toLowerCase().endsWith('.apk');
 }
 
-export function buildIosUploadTarget({ buildsDir, branch, version, filename }) {
+export function buildIosUploadTarget({ buildsDir, branch, version, filename, env }) {
     if (!validateIosUploadFile(filename)) {
         throw new Error('只允许上传 .ipa 文件');
     }
 
     const safeBranch = sanitizeSegment(branch, 'unknown');
     const safeVersion = sanitizeSegment(version, 'unknown');
+    const safeEnv = normalizeIosEnv(env, false);
     const safeFilename = basename(filename);
-    const relativePath = join('ios', safeBranch, safeVersion, safeFilename);
+    const relativePath = join('ios', safeBranch, safeEnv, safeVersion, safeFilename);
 
     return {
         branch: safeBranch,
         version: safeVersion,
+        env: safeEnv,
         filename: safeFilename,
         relativePath,
-        directory: join(buildsDir, 'ios', safeBranch, safeVersion),
+        directory: join(buildsDir, 'ios', safeBranch, safeEnv, safeVersion),
         absolutePath: join(buildsDir, relativePath),
     };
 }

@@ -42,6 +42,21 @@ class ArtifactPortal {
     }
 
     /**
+     * API 已保证 iOS 身份为 pre / production；未知值只显示固定占位，避免拼接外部输入。
+     * @param {string|undefined|null} env
+     * @returns {string} HTML
+     */
+    renderEnvBadge(env) {
+        if (env === 'pre') {
+            return '<span class="env-badge env-badge-pre">pre</span>';
+        }
+        if (env === 'production') {
+            return '<span class="env-badge env-badge-production">production</span>';
+        }
+        return '<span class="env-badge env-badge-unknown">unknown</span>';
+    }
+
+    /**
      * 缓存 DOM 元素
      */
     cacheElements() {
@@ -92,8 +107,10 @@ class ArtifactPortal {
             history: document.getElementById('history'),
             historyToggle: document.getElementById('history-toggle'),
             iosBranchFilter: document.getElementById('ios-branch-filter'),
+            iosEnvFilter: document.getElementById('ios-env-filter'),
             androidBranchFilter: document.getElementById('android-branch-filter'),
             mobileBranchFilter: document.getElementById('mobile-branch-filter'),
+            mobileEnvFilter: document.getElementById('mobile-env-filter'),
             versionRows: document.getElementById('version-rows'),
             loadMore: document.getElementById('load-more'),
 
@@ -117,8 +134,9 @@ class ArtifactPortal {
             labVersionWrap: document.getElementById('lab-version-wrap'),
         };
 
-        // 分支筛选状态
+        // 分支 / 身份筛选状态
         this.iosBranch = '';
+        this.iosEnv = '';
         this.androidBranch = '';
 
         // 移动端当前选中的平台（全局）
@@ -309,6 +327,13 @@ class ArtifactPortal {
             this.renderVersionLists();
         });
 
+        // iOS 身份筛选（pre / production）
+        this.els.iosEnvFilter?.addEventListener('change', () => {
+            this.iosEnv = this.els.iosEnvFilter.value;
+            if (this.els.mobileEnvFilter) this.els.mobileEnvFilter.value = this.iosEnv;
+            void this.loadBuilds(false);
+        });
+
         // Android 分支筛选（桌面端）
         this.els.androidBranchFilter?.addEventListener('change', () => {
             this.androidBranch = this.els.androidBranchFilter.value;
@@ -325,6 +350,13 @@ class ArtifactPortal {
                 this.androidBranch = branch;
             }
             this.renderVersionLists();
+        });
+
+        // 移动端身份筛选
+        this.els.mobileEnvFilter?.addEventListener('change', () => {
+            this.iosEnv = this.els.mobileEnvFilter.value;
+            if (this.els.iosEnvFilter) this.els.iosEnvFilter.value = this.iosEnv;
+            void this.loadBuilds(false);
         });
 
         // 关闭详情卡片
@@ -365,6 +397,7 @@ class ArtifactPortal {
 
         // 更新移动端分支筛选器
         this.updateMobileBranchFilter();
+        this.updateMobileEnvFilterVisibility();
 
         // 重新渲染版本列表
         this.renderVersionLists();
@@ -433,6 +466,12 @@ class ArtifactPortal {
         this.els.mobileBranchFilter.value = currentBranch;
     }
 
+    /** Android 没有 iOS 包身份概念，切换平台时隐藏无效筛选器。 */
+    updateMobileEnvFilterVisibility() {
+        if (!this.els.mobileEnvFilter) return;
+        this.els.mobileEnvFilter.hidden = this.mobilePlatform !== 'ios';
+    }
+
     /**
      * 根据设备类型设置默认平台显示
      * 移动端显示全局平台切换，桌面端隐藏
@@ -462,6 +501,7 @@ class ArtifactPortal {
 
             // 更新移动端分支筛选器
             this.updateMobileBranchFilter();
+            this.updateMobileEnvFilterVisibility();
 
             // 重新渲染内容以匹配选中的平台
             this.updateLatestPlatformVisibility();
@@ -628,9 +668,19 @@ class ArtifactPortal {
             if (platform) {
                 params.set('platform', platform);
             }
+            if (this.iosEnv) {
+                params.set('env', this.iosEnv);
+            }
+
+            const latestParams = new URLSearchParams({
+                env: this.iosEnv || 'production',
+            });
+            if (branch) {
+                latestParams.set('branch', branch);
+            }
 
             const [latestRes, buildsRes] = await Promise.all([
-                append ? Promise.resolve(null) : fetch(`/api/builds/latest${branch ? `?branch=${branch}` : ''}`),
+                append ? Promise.resolve(null) : fetch(`/api/builds/latest?${latestParams}`),
                 fetch(`/api/builds?${params}`),
             ]);
 
@@ -689,9 +739,7 @@ class ArtifactPortal {
             }
 
             // 收集最新构建 ID（用于在列表中标记）
-            this.latestIds = new Set();
-            if (this.latestByPlatform?.ios) this.latestIds.add(this.latestByPlatform.ios.id);
-            if (this.latestByPlatform?.android) this.latestIds.add(this.latestByPlatform.android.id);
+            this.updateLatestIds();
 
             // 渲染所有构建列表（包含最新构建，带标识）
             this.renderHistory(append ? builds : this.builds, append);
@@ -704,6 +752,12 @@ class ArtifactPortal {
             this.els.loading.hidden = true;
             this.els.emptyState.hidden = false;
         }
+    }
+
+    updateLatestIds() {
+        this.latestIds = new Set();
+        if (this.latestByPlatform?.ios) this.latestIds.add(this.latestByPlatform.ios.id);
+        if (this.latestByPlatform?.android) this.latestIds.add(this.latestByPlatform.android.id);
     }
 
     /**
@@ -814,10 +868,12 @@ class ArtifactPortal {
             const iosVersionEl = document.getElementById('ios-version-info');
             if (iosVersionEl) {
                 const size = ios.size || '';
+                const envBadge = this.renderEnvBadge(ios.env);
                 iosVersionEl.innerHTML = `
                     <div class="version-item-info">
                         <div class="version-item-header">
                             <span class="version-item-version">${ios.version} (${ios.build})</span>
+                            ${envBadge}
                             ${size ? `<span class="version-item-size">${size}</span>` : ''}
                         </div>
                         <div class="version-item-time">${this.formatTime(iosBuild.time)}</div>
@@ -958,9 +1014,12 @@ class ArtifactPortal {
         let iosBuilds = this.allBuilds.filter(b => b.platforms?.ios?.available);
         let androidBuilds = this.allBuilds.filter(b => b.platforms?.android?.available);
 
-        // 应用分支筛选
+        // 应用分支 / 身份筛选
         if (this.iosBranch) {
             iosBuilds = iosBuilds.filter(b => b.platforms.ios.branch === this.iosBranch);
+        }
+        if (this.iosEnv) {
+            iosBuilds = iosBuilds.filter(b => b.platforms.ios.env === this.iosEnv);
         }
         if (this.androidBranch) {
             androidBuilds = androidBuilds.filter(b => b.platforms.android.branch === this.androidBranch);
@@ -1154,11 +1213,13 @@ class ArtifactPortal {
         // 包大小
         const size = platformData.size || '';
 
+        const envBadge = platform === 'ios' ? this.renderEnvBadge(platformData.env) : '';
         item.innerHTML = `
             <div class="version-item-info">
                 <div class="version-item-header">
                     ${isLatest ? '<span class="latest-badge">最新</span>' : ''}
                     <span class="version-item-version">${platformData.version} (${platformData.build})</span>
+                    ${envBadge}
                     ${size ? `<span class="version-item-size">${size}</span>` : ''}
                 </div>
                 <div class="version-item-time">${buildTime}</div>
@@ -1486,6 +1547,10 @@ class ArtifactPortal {
                         <div class="detail-info-row">
                             <span class="detail-info-label">分支</span>
                             <span class="detail-info-value">${ios.branch || '-'}</span>
+                        </div>
+                        <div class="detail-info-row">
+                            <span class="detail-info-label">推送环境</span>
+                            <span class="detail-info-value">${this.renderEnvBadge(ios.env)} ${ios.env || 'unknown'}</span>
                         </div>
                         <div class="detail-info-row">
                             <span class="detail-info-label">大小</span>

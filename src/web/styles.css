@@ -1484,6 +1484,31 @@ body {
     letter-spacing: 0.3px;
 }
 
+/* iOS 包身份 badge：pre / production（A1） */
+.env-badge {
+    font-size: 9px;
+    font-weight: 600;
+    padding: 2px 5px;
+    border-radius: 3px;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    flex-shrink: 0;
+}
+/* 历史 class 保留：sandbox 与 pre 同色 */
+.env-badge-sandbox,
+.env-badge-pre {
+    background-color: #16a34a;
+    color: #fff;
+}
+.env-badge-production {
+    background-color: #2563eb;
+    color: #fff;
+}
+.env-badge-unknown {
+    background-color: #6b7280;
+    color: #fff;
+}
+
 /* 旧的样式保留用于兼容 */
 .history-list {
     display: none;

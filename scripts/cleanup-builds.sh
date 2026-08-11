@@ -5,7 +5,8 @@
 # 清理当前上传目录结构中的旧 IPA/APK 文件。
 #
 # 支持目录：
-#   builds/ios/<branch>/<version>/*.ipa
+#   builds/ios/<branch>/<env>/<version>/*.ipa  （env: pre / production）
+#   builds/ios/<branch>/<version>/*.ipa        （旧结构兼容）
 #   builds/android/<branch>/<version>.<build>/*.apk
 #   builds/android/<branch>/<version>.<build>/*.mapping.zip
 #     （与对应 APK 同目录，随 APK 一起清理，APK 不存在的 mapping 视为孤立文件删除）
@@ -114,9 +115,7 @@ cleanup_empty_dirs() {
     find "$platform_dir" -mindepth 1 -depth -type d -empty -delete 2>/dev/null || true
 }
 
-cleanup_branch() {
-    local branch_dir="$1"
-    local pattern="$2"
+cleanup_ranked_files() {
     local now
     local index=0
 
@@ -138,13 +137,62 @@ cleanup_branch() {
             delete_file "$file" "exceeds ${MAX_PER_BRANCH} per branch"
             continue
         fi
-    done < <(
-        find "$branch_dir" -type f -name "$pattern" -print0 |
+    done
+}
+
+cleanup_branch() {
+    local branch_dir="$1"
+    local pattern="$2"
+
+    find "$branch_dir" -type f -name "$pattern" -print0 |
             while IFS= read -r -d '' file; do
                 printf '%s\t%s\n' "$(file_mtime "$file")" "$file"
             done |
-            sort -rn
-    )
+            sort -rn |
+            cleanup_ranked_files
+}
+
+cleanup_legacy_ios_branch() {
+    local branch_dir="$1"
+
+    # 新目录按 env 独立计数；这里仅处理不位于身份目录下的旧两层布局。
+    find "$branch_dir" -type f -name '*.ipa' \
+            ! -path "$branch_dir/pre/*" \
+            ! -path "$branch_dir/production/*" \
+            ! -path "$branch_dir/sandbox/*" \
+            -print0 |
+        while IFS= read -r -d '' file; do
+            printf '%s\t%s\n' "$(file_mtime "$file")" "$file"
+        done |
+        sort -rn |
+        cleanup_ranked_files
+}
+
+cleanup_ios_platform() {
+    local ios_dir="$BUILDS_DIR/ios"
+
+    if [ ! -d "$ios_dir" ]; then
+        return 0
+    fi
+
+    find "$ios_dir" -mindepth 1 -maxdepth 1 -type d -print0 |
+        while IFS= read -r -d '' branch_dir; do
+            local branch
+            branch="$(basename "$branch_dir")"
+
+            for env in pre production sandbox; do
+                local env_dir="$branch_dir/$env"
+                if [ -d "$env_dir" ]; then
+                    log_info "检查身份: ios/$branch/$env"
+                    cleanup_branch "$env_dir" '*.ipa'
+                fi
+            done
+
+            log_info "检查旧布局: ios/$branch"
+            cleanup_legacy_ios_branch "$branch_dir"
+        done
+
+    cleanup_empty_dirs "$ios_dir"
 }
 
 cleanup_platform() {
@@ -217,13 +265,13 @@ if [ ! -d "$BUILDS_DIR" ]; then
 fi
 
 log_info "构建目录: $BUILDS_DIR"
-log_info "每个平台每个分支保留数量: $MAX_PER_BRANCH"
+log_info "保留数量: iOS 每个分支/身份、Android 每个分支最多 $MAX_PER_BRANCH 个"
 log_info "保留天数: $MAX_AGE_DAYS"
 if [ "$DRY_RUN" = "true" ]; then
     log_warn "模拟运行模式 (DRY_RUN=true)"
 fi
 
-cleanup_platform "ios" "*.ipa"
+cleanup_ios_platform
 cleanup_platform "android" "*.apk"
 cleanup_legacy_mappings
 cleanup_orphan_mappings

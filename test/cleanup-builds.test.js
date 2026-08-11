@@ -32,7 +32,7 @@ function runCleanup(buildsDir, options = {}) {
     });
 }
 
-test('cleanup script previews old artifacts in current upload layout', async () => {
+test('cleanup script previews old artifacts in legacy iOS upload layout', async () => {
     const buildsDir = await mkdtemp(join(tmpdir(), 'artifact-cleanup-'));
 
     try {
@@ -90,6 +90,31 @@ test('cleanup script deletes old artifacts when dry run is disabled', async () =
         assert.equal(result.status, 0, result.stderr || result.stdout);
         await assert.rejects(stat(oldest), /ENOENT/);
         assert.equal((await stat(newest)).isFile(), true);
+    } finally {
+        await rm(buildsDir, { recursive: true, force: true });
+    }
+});
+
+test('cleanup script keeps iOS quotas independent for pre and production', async () => {
+    const buildsDir = await mkdtemp(join(tmpdir(), 'artifact-cleanup-'));
+
+    try {
+        const preBuild = await createBuildFile(
+            buildsDir,
+            'ios/dev/pre/1.2.0/IMWE-1.2.0(100).ipa',
+            '2026-01-01T00:00:00Z'
+        );
+        const productionBuild = await createBuildFile(
+            buildsDir,
+            'ios/dev/production/1.2.0/IMWE-1.2.0(101).ipa',
+            '2026-01-02T00:00:00Z'
+        );
+
+        const result = runCleanup(buildsDir, { dryRun: false, maxBuilds: 1 });
+
+        assert.equal(result.status, 0, result.stderr || result.stdout);
+        assert.equal((await stat(preBuild)).isFile(), true);
+        assert.equal((await stat(productionBuild)).isFile(), true);
     } finally {
         await rm(buildsDir, { recursive: true, force: true });
     }

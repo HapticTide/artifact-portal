@@ -181,7 +181,7 @@ stop_server() {
     local count=0
     while ps -p "$pid" > /dev/null 2>&1 && [ $count -lt 10 ]; do
         sleep 1
-        ((count++))
+        count=$((count + 1))
     done
     
     if ps -p "$pid" > /dev/null 2>&1; then

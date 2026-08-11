@@ -23,7 +23,7 @@ const db = new Database(DB_PATH);
 // 启用 WAL 模式以提升性能
 db.pragma('journal_mode = WAL');
 
-// 数据库迁移：为旧表添加 deleted 字段（在初始化表结构之前执行）
+// 数据库迁移：为旧表添加字段（在初始化表结构之前执行）
 try {
     // 检查表是否存在
     const tableExists = db.prepare(
@@ -40,6 +40,16 @@ try {
             db.exec('ALTER TABLE builds ADD COLUMN deleted INTEGER NOT NULL DEFAULT 0');
             console.log('[Database] 迁移: 已添加 deleted 字段用于保留历史统计数据');
         }
+
+        // 包身份列（pre/production；历史行默认 production）
+        const hasEnvColumn = db.prepare(
+            "SELECT COUNT(*) as cnt FROM pragma_table_info('builds') WHERE name='env'"
+        ).get().cnt > 0;
+
+        if (!hasEnvColumn) {
+            db.exec("ALTER TABLE builds ADD COLUMN env TEXT NOT NULL DEFAULT 'production'");
+            console.log('[Database] 迁移: 已添加 env 字段（默认 production）');
+        }
     }
 } catch (e) {
     console.error('[Database] 迁移检查失败:', e.message);
@@ -50,9 +60,10 @@ db.exec(`
     -- 构建历史记录表
     CREATE TABLE IF NOT EXISTS builds (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        dir TEXT NOT NULL UNIQUE,           -- 构建目录标识 (如 ios_dev_0.7.0_390)
+        dir TEXT NOT NULL UNIQUE,           -- 构建目录标识 (如 ios_dev_sandbox_0.7.0_390)
         platform TEXT NOT NULL,             -- 平台 (ios/android)
         branch TEXT NOT NULL,               -- 分支
+        env TEXT NOT NULL DEFAULT 'production', -- iOS 包身份 (pre/production)；android 固定 production
         version TEXT NOT NULL,              -- 版本号
         build TEXT NOT NULL,                -- 构建号
         size INTEGER NOT NULL DEFAULT 0,    -- 包大小 (bytes)
@@ -66,6 +77,7 @@ db.exec(`
     -- 索引优化查询性能
     CREATE INDEX IF NOT EXISTS idx_builds_platform ON builds(platform);
     CREATE INDEX IF NOT EXISTS idx_builds_branch ON builds(branch);
+    CREATE INDEX IF NOT EXISTS idx_builds_env ON builds(env);
     CREATE INDEX IF NOT EXISTS idx_builds_time ON builds(time DESC);
     CREATE INDEX IF NOT EXISTS idx_builds_platform_time ON builds(platform, time DESC);
     CREATE INDEX IF NOT EXISTS idx_builds_deleted ON builds(deleted);
@@ -78,14 +90,42 @@ console.log('[Database] SQLite 数据库已初始化:', DB_PATH);
  */
 class BuildDatabase {
     /**
+     * 将旧版不带 env 的 iOS dir 原位迁移为当前唯一 ID。
+     * 若一次未完成的升级已生成新行，则删除仅用于同一构建的旧重复行，避免历史统计双计。
+     */
+    migrateLegacyIosBuild({ branch, env, version, build, dir }) {
+        const legacyDir = `ios_${branch}_${version}_${build}`;
+        if (legacyDir === dir) return;
+
+        const legacy = db.prepare('SELECT id FROM builds WHERE dir = ?').get(legacyDir);
+        if (!legacy) return;
+
+        const current = db.prepare('SELECT id FROM builds WHERE dir = ?').get(dir);
+        const migrate = db.transaction(() => {
+            if (current && current.id !== legacy.id) {
+                db.prepare('DELETE FROM builds WHERE id = ?').run(legacy.id);
+                return;
+            }
+            db.prepare(`
+                UPDATE builds
+                SET dir = ?, env = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+            `).run(dir, env, legacy.id);
+        });
+        migrate();
+    }
+
+    /**
      * 插入或更新构建记录
      * @param {Object} build - 构建信息
      */
     upsertBuild(build) {
+        const env = build.env || 'production';
         const stmt = db.prepare(`
-            INSERT INTO builds (dir, platform, branch, version, build, size, time, file_path, deleted, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, CURRENT_TIMESTAMP)
+            INSERT INTO builds (dir, platform, branch, env, version, build, size, time, file_path, deleted, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, CURRENT_TIMESTAMP)
             ON CONFLICT(dir) DO UPDATE SET
+                env = excluded.env,
                 size = excluded.size,
                 time = excluded.time,
                 file_path = excluded.file_path,
@@ -97,6 +137,7 @@ class BuildDatabase {
             build.dir,
             build.platform,
             build.branch,
+            env,
             build.version,
             build.build,
             build.size,
@@ -111,9 +152,10 @@ class BuildDatabase {
      */
     upsertBuilds(builds) {
         const upsert = db.prepare(`
-            INSERT INTO builds (dir, platform, branch, version, build, size, time, file_path, deleted, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, CURRENT_TIMESTAMP)
+            INSERT INTO builds (dir, platform, branch, env, version, build, size, time, file_path, deleted, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, CURRENT_TIMESTAMP)
             ON CONFLICT(dir) DO UPDATE SET
+                env = excluded.env,
                 size = excluded.size,
                 time = excluded.time,
                 file_path = excluded.file_path,
@@ -127,6 +169,7 @@ class BuildDatabase {
                     b.dir,
                     b.platform,
                     b.branch,
+                    b.env || 'production',
                     b.version,
                     b.build,
                     b.size,

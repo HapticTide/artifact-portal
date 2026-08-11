@@ -18,6 +18,7 @@ import {
     buildAndroidMappingUploadTarget,
     buildAndroidUploadTarget,
     buildIosUploadTarget,
+    normalizeIosEnv,
     validateAndroidMappingUploadFile,
     validateAndroidUploadFile,
     validateIosUploadFile,
@@ -62,7 +63,7 @@ async function writeRequestBodyToFile(req, targetPath) {
 
 /**
  * POST /api/upload/ios - 上传 iOS IPA 文件
- * Query: branch, version, filename
+ * Query: branch, version, filename, env? (pre|production；兼容 sandbox，缺省 production)
  * Auth: Authorization: Bearer <UPLOAD_TOKEN>
  */
 router.post('/api/upload/ios', async (req, res) => {
@@ -83,7 +84,7 @@ router.post('/api/upload/ios', async (req, res) => {
             });
         }
 
-        const { branch, version, filename } = req.query;
+        const { branch, version, filename, env } = req.query;
         const uploadFilename = filename || req.get('x-artifact-filename');
 
         if (!branch || !version || !uploadFilename) {
@@ -100,6 +101,22 @@ router.post('/api/upload/ios', async (req, res) => {
             });
         }
 
+        let target;
+        try {
+            target = buildIosUploadTarget({
+                buildsDir: artifactManager.buildsDir,
+                branch,
+                version,
+                filename: uploadFilename,
+                env,
+            });
+        } catch (validationErr) {
+            return res.status(400).json({
+                success: false,
+                error: validationErr.message || '参数非法',
+            });
+        }
+
         const contentLength = parseInt(req.get('content-length') || '0');
         if (contentLength > config.uploadMaxBytes) {
             return res.status(413).json({
@@ -107,13 +124,6 @@ router.post('/api/upload/ios', async (req, res) => {
                 error: '上传文件超过大小限制',
             });
         }
-
-        const target = buildIosUploadTarget({
-            buildsDir: artifactManager.buildsDir,
-            branch,
-            version,
-            filename: uploadFilename,
-        });
 
         const uploadTempDir = join(artifactManager.buildsDir, '.uploads');
         await mkdir(uploadTempDir, { recursive: true });
@@ -140,6 +150,7 @@ router.post('/api/upload/ios', async (req, res) => {
             data: {
                 platform: 'ios',
                 branch: target.branch,
+                env: target.env,
                 version: target.version,
                 filename: target.filename,
                 size,
@@ -405,17 +416,26 @@ router.post('/api/upload/android/mapping', async (req, res) => {
 
 /**
  * GET /api/builds - 获取构建列表
- * Query: days（每次加载天数）, skipDays（跳过天数）, branch, platform
+ * Query: days（每次加载天数）, skipDays（跳过天数）, branch, platform, env
  */
 router.get('/api/builds', async (req, res) => {
     try {
-        const { days = '3', skipDays = '0', branch, platform } = req.query;
+        const { days = '3', skipDays = '0', branch, platform, env } = req.query;
+        let normalizedEnv = null;
+        if (env !== undefined) {
+            try {
+                normalizedEnv = normalizeIosEnv(env);
+            } catch (validationErr) {
+                return res.status(400).json({ success: false, error: validationErr.message });
+            }
+        }
 
         const result = await artifactManager.getBuilds({
             days: Math.min(parseInt(days) || 3, 30),
             skipDays: parseInt(skipDays) || 0,
             branch: branch || null,
             platform: platform || null,
+            env: normalizedEnv,
         });
 
         res.json({
@@ -434,14 +454,21 @@ router.get('/api/builds', async (req, res) => {
 /**
  * GET /api/builds/latest - 获取最新构建（分平台）
  * 同时返回 iOS 和 Android 的最新构建
- * Query: branch
+ * Query: branch, env（缺省 production；sandbox 兼容为 pre）
  */
 router.get('/api/builds/latest', async (req, res) => {
     try {
-        const { branch } = req.query;
+        const { branch, env } = req.query;
+        let normalizedEnv;
+        try {
+            normalizedEnv = normalizeIosEnv(env);
+        } catch (validationErr) {
+            return res.status(400).json({ success: false, error: validationErr.message });
+        }
 
         const result = await artifactManager.getLatestByPlatform({
             branch: branch || null,
+            env: normalizedEnv,
         });
 
         res.json({
@@ -632,15 +659,22 @@ router.get('/api/config', (req, res) => {
 
 /**
  * GET /latest - 跳转到最新构建
- * Query: platform, branch
+ * Query: platform, branch, env（iOS 缺省 production；sandbox 兼容为 pre）
  */
 router.get('/latest', async (req, res) => {
     try {
-        const { platform, branch } = req.query;
+        const { platform, branch, env } = req.query;
+        let normalizedEnv;
+        try {
+            normalizedEnv = normalizeIosEnv(env);
+        } catch (validationErr) {
+            return res.status(400).send(validationErr.message);
+        }
 
         const build = await artifactManager.getLatestBuild({
             platform: platform || null,
             branch: branch || null,
+            env: normalizedEnv,
         });
 
         if (!build) {
@@ -936,7 +970,7 @@ router.get('/api/ios-install-url/:buildId', async (req, res) => {
         // manifest URL（静态或动态）
         const manifestUrl = ios.hasStaticManifest
             ? `${config.publicBaseUrl}/download/${ios.manifest}`
-            : `${config.publicBaseUrl}/api/manifest/${buildId}`;
+            : `${config.publicBaseUrl}/api/manifest/${build.id}`;
 
         const installUrl = `itms-services://?action=download-manifest&url=${encodeURIComponent(manifestUrl)}`;
 
