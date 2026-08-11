@@ -68,29 +68,68 @@ function parseIpaFilename(filename) {
 }
 
 /**
- * 从 IPA 文件解析 Info.plist 信息（Bundle ID 和 Display Name）
+ * 从 IPA 文件解析 Info.plist 信息（Bundle ID 和 Display Name）。
+ *
+ * 优先 python3+plistlib：Linux 部署机通常无 plutil，且 Xcode 产物 Info.plist 多为 bplist。
+ * 旧路径依赖 `unzip | plutil -p`，在 VPS 上会静默失败并回退到 com.example.app，
+ * 导致 OTA manifest 的 bundle-identifier 错误、手机安装报 Unable to Install。
+ *
  * @param {string} ipaPath - IPA 文件路径
  * @returns {Promise<{bundleId: string|null, displayName: string|null}>}
  */
 async function parseIpaInfoPlist(ipaPath) {
-    const { exec } = await import('child_process');
+    const { exec, execFile } = await import('child_process');
     const { promisify } = await import('util');
     const execAsync = promisify(exec);
+    const execFileAsync = promisify(execFile);
 
     const result = { bundleId: null, displayName: null };
 
-    try {
-        // 获取完整的 Info.plist 内容
-        const cmd = `unzip -q -c "${ipaPath}" 'Payload/*.app/Info.plist' 2>/dev/null | plutil -p - 2>/dev/null`;
-        const { stdout } = await execAsync(cmd, { timeout: 5000 });
+    // python3 读取 ZIP 内二进制/XML Info.plist（macOS / Linux 均可用）
+    const py = `
+import json, sys, zipfile, plistlib
+ipa = sys.argv[1]
+with zipfile.ZipFile(ipa) as z:
+    name = next(
+        n for n in z.namelist()
+        if n.startswith("Payload/") and n.endswith(".app/Info.plist") and n.count("/") == 2
+    )
+    p = plistlib.loads(z.read(name))
+print(json.dumps({
+    "bundleId": p.get("CFBundleIdentifier"),
+    "displayName": p.get("CFBundleDisplayName") or p.get("CFBundleName"),
+}, ensure_ascii=False))
+`.trim();
 
-        // 解析 CFBundleIdentifier
+    try {
+        const { stdout } = await execFileAsync('python3', ['-c', py, ipaPath], {
+            timeout: 15000,
+            maxBuffer: 4 * 1024 * 1024,
+        });
+        const parsed = JSON.parse(String(stdout || '').trim());
+        if (parsed.bundleId) {
+            result.bundleId = parsed.bundleId;
+        }
+        if (parsed.displayName) {
+            result.displayName = parsed.displayName;
+        }
+        if (result.bundleId) {
+            return result;
+        }
+    } catch {
+        // fall through to plutil
+    }
+
+    try {
+        // 兼容：本机 macOS 有 plutil 时的旧路径
+        const cmd = `unzip -q -c ${JSON.stringify(ipaPath)} 'Payload/*.app/Info.plist' 2>/dev/null | plutil -p - 2>/dev/null`;
+        const { stdout } = await execAsync(cmd, { timeout: 10000 });
+
         const bundleIdMatch = stdout.match(/"CFBundleIdentifier"\s*=>\s*"([^"]+)"/);
         if (bundleIdMatch) {
             result.bundleId = bundleIdMatch[1];
         }
 
-        // 解析 CFBundleDisplayName（优先）或 CFBundleName
         const displayNameMatch = stdout.match(/"CFBundleDisplayName"\s*=>\s*"([^"]+)"/);
         const bundleNameMatch = stdout.match(/"CFBundleName"\s*=>\s*"([^"]+)"/);
 
@@ -101,8 +140,7 @@ async function parseIpaInfoPlist(ipaPath) {
         }
 
         return result;
-    } catch (err) {
-        // 解析失败，返回空结果
+    } catch {
         return result;
     }
 }
@@ -191,7 +229,21 @@ class ArtifactManager {
                 // 解析失败，使用配置中的默认值
             }
 
-            const resolvedBundleId = bundleId || config.iosBundleId;
+            // 解析失败时：按目录 env / 文件名推断，禁止落到 com.example.app 这种占位 Bundle ID
+            // （否则 iOS OTA manifest 与 IPA 不一致 → Unable to Install）
+            let fallbackBundleId = config.iosBundleId;
+            const envHint = (env || storageEnv || '').toLowerCase();
+            const nameHint = `${parsed.appName || ''} ${ipaFile}`.toLowerCase();
+            if (envHint === 'pre' || envHint === 'sandbox' || nameHint.includes('imwe-pre') || nameHint.includes('.pre')) {
+                fallbackBundleId = 'com.imwe.app.pre';
+            } else if (envHint === 'production' || envHint === 'prod' || nameHint.includes('imwe')) {
+                // 正式包默认；若项目另有 Bundle ID，仍以 IPA 解析为准
+                fallbackBundleId = config.iosBundleId && config.iosBundleId !== 'com.example.app'
+                    ? config.iosBundleId
+                    : 'com.imwe.app';
+            }
+
+            const resolvedBundleId = bundleId || fallbackBundleId;
             const resolvedEnv = resolveIosEnv(env, resolvedBundleId);
             const id = buildIosArtifactId(branch, resolvedEnv, parsed.version, parsed.build);
             builds.push({
