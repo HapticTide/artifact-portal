@@ -246,6 +246,14 @@ class ArtifactManager {
             const resolvedBundleId = bundleId || fallbackBundleId;
             const resolvedEnv = resolveIosEnv(env, resolvedBundleId);
             const id = buildIosArtifactId(branch, resolvedEnv, parsed.version, parsed.build);
+            // 列表展示名：pre 包根 Info.plist 可能是 "IMWE Pre"，但真机被 InfoPlist.strings
+            // 盖成 "IMWE"。对外不宣称桌面显示名为 IMWE Pre，统一展示 IMWE，身份靠 env badge / 图标。
+            let uiAppName = displayName || parsed.appName || 'IMWE';
+            if (resolvedEnv === 'pre' || resolvedEnv === 'sandbox') {
+                if (!uiAppName || uiAppName === 'IMWE Pre' || /^IMWE[-_]?pre$/i.test(String(uiAppName))) {
+                    uiAppName = 'IMWE';
+                }
+            }
             builds.push({
                 platform: 'ios',
                 branch,
@@ -255,7 +263,7 @@ class ArtifactManager {
                 hasLegacySource: storageEnv === null,
                 version: parsed.version,
                 build: parsed.build,
-                appName: displayName || parsed.appName,
+                appName: uiAppName,
                 bundleId: resolvedBundleId,
                 filename: ipaFile,
                 relativePath: `${relativeVersionPrefix}/${ipaFile}`,
@@ -700,16 +708,20 @@ class ArtifactManager {
      * @returns {Promise<{ios: object|null, android: object|null}>}
      */
     async getLatestByPlatform(options = {}) {
-        const { branch = null, env = 'production' } = options;
+        // env 为空 / null / all：不按身份过滤，取时间上真正最新的包（pre 或 production）
+        // env=pre|production：只取该身份下最新
+        const { branch = null, env = null } = options;
 
         await this._ensureCache();
 
-        // 过滤并获取 iOS 最新
+        // 过滤并获取 iOS 最新（_iosCache 已按 time 倒序）
         let iosBuilds = this._iosCache;
         if (branch) {
             iosBuilds = iosBuilds.filter(b => b.branch === branch);
         }
-        iosBuilds = iosBuilds.filter(b => b.env === env);
+        if (env && env !== 'all') {
+            iosBuilds = iosBuilds.filter(b => b.env === env);
+        }
         const latestIos = iosBuilds.length > 0 ? this._formatIosBuild(iosBuilds[0]) : null;
 
         // 过滤并获取 Android 最新

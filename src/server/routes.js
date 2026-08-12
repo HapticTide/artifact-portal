@@ -454,21 +454,24 @@ router.get('/api/builds', async (req, res) => {
 /**
  * GET /api/builds/latest - 获取最新构建（分平台）
  * 同时返回 iOS 和 Android 的最新构建
- * Query: branch, env（缺省 production；sandbox 兼容为 pre）
+ * Query: branch, env（可选 pre|production；省略或 all = 不按身份过滤，取时间最新；sandbox→pre）
  */
 router.get('/api/builds/latest', async (req, res) => {
     try {
         const { branch, env } = req.query;
-        let normalizedEnv;
-        try {
-            normalizedEnv = normalizeIosEnv(env);
-        } catch (validationErr) {
-            return res.status(400).json({ success: false, error: validationErr.message });
+        let filterEnv = null;
+        // 未传 / 空 / all：不限身份，返回真正时间最新
+        if (env !== undefined && env !== null && String(env).trim() !== '' && String(env).toLowerCase() !== 'all') {
+            try {
+                filterEnv = normalizeIosEnv(env);
+            } catch (validationErr) {
+                return res.status(400).json({ success: false, error: validationErr.message });
+            }
         }
 
         const result = await artifactManager.getLatestByPlatform({
             branch: branch || null,
-            env: normalizedEnv,
+            env: filterEnv,
         });
 
         res.json({
@@ -659,22 +662,24 @@ router.get('/api/config', (req, res) => {
 
 /**
  * GET /latest - 跳转到最新构建
- * Query: platform, branch, env（iOS 缺省 production；sandbox 兼容为 pre）
+ * Query: platform, branch, env（可选 pre|production；省略或 all = 不限身份，时间最新）
  */
 router.get('/latest', async (req, res) => {
     try {
         const { platform, branch, env } = req.query;
-        let normalizedEnv;
-        try {
-            normalizedEnv = normalizeIosEnv(env);
-        } catch (validationErr) {
-            return res.status(400).send(validationErr.message);
+        let filterEnv = null;
+        if (env !== undefined && env !== null && String(env).trim() !== '' && String(env).toLowerCase() !== 'all') {
+            try {
+                filterEnv = normalizeIosEnv(env);
+            } catch (validationErr) {
+                return res.status(400).send(validationErr.message);
+            }
         }
 
         const build = await artifactManager.getLatestBuild({
             platform: platform || null,
             branch: branch || null,
-            env: normalizedEnv,
+            env: filterEnv,
         });
 
         if (!build) {

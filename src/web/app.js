@@ -672,9 +672,11 @@ class ArtifactPortal {
                 params.set('env', this.iosEnv);
             }
 
-            const latestParams = new URLSearchParams({
-                env: this.iosEnv || 'production',
-            });
+            // 身份筛选为空时不传 env，让服务端返回时间上真正最新（pre 或 production）
+            const latestParams = new URLSearchParams();
+            if (this.iosEnv) {
+                latestParams.set('env', this.iosEnv);
+            }
             if (branch) {
                 latestParams.set('branch', branch);
             }
