@@ -122,6 +122,8 @@ class ArtifactPortal {
             // Toast
             toast: document.getElementById('toast'),
 
+            desktopEntryBtn: document.getElementById('desktop-entry-btn'),
+
             // E2EE Lab 桌面工具 入口 + 弹窗
             labEntryBtn: document.getElementById('lab-entry-btn'),
             labModal: document.getElementById('lab-modal'),
@@ -240,6 +242,10 @@ class ArtifactPortal {
     bindEvents() {
         // 主题切换
         this.els.themeToggle.addEventListener('click', () => this.toggleTheme());
+
+        this.els.desktopEntryBtn?.addEventListener('click', () => {
+            window.open("http://172.16.41.142:3000/");
+        });
 
         // E2EE Lab 桌面工具 入口弹窗
         this.els.labEntryBtn?.addEventListener('click', () => this.openLabModal());
