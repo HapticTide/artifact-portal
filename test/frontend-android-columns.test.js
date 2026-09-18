@@ -58,13 +58,12 @@ test('desktop history groups APK environments independently of branches', () => 
     assert.equal(devRow.children[1].children.length, 3);
 });
 
-test('desktop Android branch selection filters only the test column', () => {
+test('desktop test column shows all test environment branches while pre stays separate', () => {
     const { portal, rows } = portalWithDocument();
     portal.els = { history: node() };
     portal.detectPlatform = () => 'other';
     portal.formatDateGroupTitle = date => date;
     portal.renderVersionItem = item => ({ buildId: item.id });
-    portal.androidBranch = 'dev';
     portal.allBuilds = [build('test', '18'), build('test', '18', 'pre'), build('dev', '17')];
 
     portal.renderVersionLists();
@@ -75,10 +74,10 @@ test('desktop Android branch selection filters only the test column', () => {
         for (const child of item.children || []) visit(child);
     }
     visit(rows);
-    assert.deepEqual(rendered.sort(), ['android_dev_test_17', 'android_test_pre_18']);
+    assert.deepEqual(rendered.sort(), ['android_dev_test_17', 'android_test_pre_18', 'android_test_test_18']);
 });
 
-test('Android branch selectors include the pre branch because it is independent of APK environment', async () => {
+test('mobile Android branch selector still includes every Git branch', async () => {
     const { portal, context } = portalWithDocument();
     function select() {
         return {
@@ -87,13 +86,11 @@ test('Android branch selectors include the pre branch because it is independent 
             appendChild(option) { this.options.push(option); },
         };
     }
-    const desktop = select();
     const mobile = select();
-    portal.els = { iosBranchFilter: select(), androidBranchFilter: desktop, mobileBranchFilter: mobile };
+    portal.els = { iosBranchFilter: select(), mobileBranchFilter: mobile };
     portal.mobilePlatform = 'android';
     context.fetch = async () => ({ json: async () => ({ success: true, data: { android: ['test', 'pre', 'dev'] } }) });
     await portal.loadBranches();
-    assert.deepEqual(desktop.options.map(option => option.value), ['', 'test', 'pre', 'dev']);
     assert.deepEqual(mobile.options.map(option => option.value), ['', 'test', 'pre', 'dev']);
 });
 
