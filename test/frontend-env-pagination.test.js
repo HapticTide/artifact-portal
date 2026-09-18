@@ -123,4 +123,5 @@ test('history API carries the selected iOS identity so day pagination is env-awa
     const historyUrl = requestedUrls.find(url => url.startsWith('/api/builds?'));
     assert.ok(historyUrl);
     assert.equal(new URL(historyUrl, 'http://127.0.0.1').searchParams.get('env'), 'pre');
+    assert.ok(requestedUrls.includes('/api/builds/latest?excludeBranch=pre'));
 });

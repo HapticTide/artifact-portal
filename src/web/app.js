@@ -115,7 +115,6 @@ class ArtifactPortal {
             iosBranchFilter: document.getElementById('ios-branch-filter'),
             iosEnvFilter: document.getElementById('ios-env-filter'),
             androidBranchFilter: document.getElementById('android-branch-filter'),
-            androidOtherHeader: document.getElementById('android-other-header'),
             mobileBranchFilter: document.getElementById('mobile-branch-filter'),
             mobileEnvFilter: document.getElementById('mobile-env-filter'),
             versionRows: document.getElementById('version-rows'),
@@ -700,7 +699,7 @@ class ArtifactPortal {
             const [latestRes, buildsRes, testRes, preRes] = await Promise.all([
                 append ? Promise.resolve(null) : fetch(`/api/builds/latest?${latestParams}`),
                 fetch(`/api/builds?${params}`),
-                append ? Promise.resolve(null) : fetch('/api/builds/latest?branch=test'),
+                append ? Promise.resolve(null) : fetch('/api/builds/latest?excludeBranch=pre'),
                 append ? Promise.resolve(null) : fetch('/api/builds/latest?branch=pre'),
             ]);
 
@@ -998,30 +997,18 @@ class ArtifactPortal {
     }
 
     /**
-     * 根据设备类型调整平台卡片顺序
-     * iOS 设备优先显示 iOS，Android 设备优先显示 Android
+     * 最新构建卡片始终按 iOS、Android test、Android pre 排列。
      */
     reorderPlatformSections() {
-        const platform = this.detectPlatform();
         const platformsContainer = this.els.iosSection?.parentElement;
-
         if (!platformsContainer) return;
-
-        // Android 设备：将 test 和 pre 卡片一起移到 iOS 前面
-        if (platform === 'android') {
-            if (this.els.androidSection && !this.els.androidSection.hidden) {
-                platformsContainer.insertBefore(this.els.androidSection, this.els.iosSection);
-            }
-            if (this.els.androidPreSection && !this.els.androidPreSection.hidden) {
-                platformsContainer.insertBefore(this.els.androidPreSection, this.els.iosSection);
-            }
-        }
-        // iOS 设备或其他设备：保持 iOS 在前（默认顺序）
-        // 不需要额外操作，因为 HTML 默认顺序就是 iOS 在前
+        [this.els.iosSection, this.els.androidSection, this.els.androidPreSection]
+            .filter(Boolean)
+            .forEach(section => platformsContainer.appendChild(section));
     }
 
     /**
-     * 渲染所有构建列表（iOS、Android test、Android pre，以及存在时的其他分支）
+     * 渲染所有构建列表（iOS、Android 非 pre、Android pre）
      * 按天分组展示
      */
     renderHistory(builds, append = false) {
@@ -1070,7 +1057,7 @@ class ArtifactPortal {
             const builds = this.mobilePlatform === 'ios' ? iosBuilds : androidBuilds;
             this.renderSingleColumnList(builds, this.mobilePlatform);
         } else {
-            // 桌面端：按分支对齐显示；保留 test/pre 以外的构建。
+            // 桌面端：所有非 pre Android 构建归入 test 列。
             const allDates = new Set();
             iosBuilds.forEach(b => allDates.add(this.getDateKey(b.time)));
             androidBuilds.forEach(b => allDates.add(this.getDateKey(b.time)));
@@ -1078,15 +1065,9 @@ class ArtifactPortal {
 
             // 按日期分组
             const iosByDate = this.groupByDate(iosBuilds);
-            const androidTestByDate = this.groupByDate(androidBuilds.filter(b => b.platforms.android.branch === 'test'));
+            const androidTestByDate = this.groupByDate(androidBuilds.filter(b => b.platforms.android.branch !== 'pre'));
             const androidPreByDate = this.groupByDate(androidBuilds.filter(b => b.platforms.android.branch === 'pre'));
-            const androidOtherBuilds = androidBuilds.filter(b => !['test', 'pre'].includes(b.platforms.android.branch));
-            const hasOtherAndroid = androidOtherBuilds.length > 0;
-            const androidOtherByDate = this.groupByDate(androidOtherBuilds);
-            this.els.history.classList.toggle('has-other-android', hasOtherAndroid);
-            this.els.androidOtherHeader.hidden = !hasOtherAndroid;
-
-            this.renderDateAlignedRows(sortedDates, iosByDate, androidTestByDate, androidPreByDate, androidOtherByDate, hasOtherAndroid);
+            this.renderDateAlignedRows(sortedDates, iosByDate, androidTestByDate, androidPreByDate);
         }
 
         this.els.history.hidden = false;
@@ -1146,9 +1127,9 @@ class ArtifactPortal {
     }
 
     /**
-     * 渲染按日期对齐的行（有其他 Android 分支时增加一列）
+     * 渲染按日期对齐的三列构建列表。
      */
-    renderDateAlignedRows(sortedDates, iosByDate, androidTestByDate, androidPreByDate, androidOtherByDate, hasOtherAndroid) {
+    renderDateAlignedRows(sortedDates, iosByDate, androidTestByDate, androidPreByDate) {
         const container = document.getElementById('version-rows');
         if (!container) return;
 
@@ -1158,8 +1139,7 @@ class ArtifactPortal {
         const validDates = sortedDates.filter(dateKey => {
             const iosCount = (iosByDate[dateKey] || []).length;
             const androidCount = (androidTestByDate[dateKey] || []).length
-                + (androidPreByDate[dateKey] || []).length
-                + (androidOtherByDate[dateKey] || []).length;
+                + (androidPreByDate[dateKey] || []).length;
             return iosCount > 0 || androidCount > 0;
         });
 
@@ -1175,7 +1155,6 @@ class ArtifactPortal {
             const iosBuildsForDate = iosByDate[dateKey] || [];
             const androidTestForDate = androidTestByDate[dateKey] || [];
             const androidPreForDate = androidPreByDate[dateKey] || [];
-            const androidOtherForDate = androidOtherByDate[dateKey] || [];
 
             // 创建日期行
             const dateRow = document.createElement('div');
@@ -1189,7 +1168,7 @@ class ArtifactPortal {
 
             const maxCount = Math.max(
                 iosBuildsForDate.length, androidTestForDate.length,
-                androidPreForDate.length, androidOtherForDate.length,
+                androidPreForDate.length,
             );
 
             for (let i = 0; i < maxCount; i++) {
@@ -1210,9 +1189,7 @@ class ArtifactPortal {
                 // 其他行留空
                 rowContent.appendChild(iosCell);
 
-                const androidColumns = [androidTestForDate, androidPreForDate];
-                if (hasOtherAndroid) androidColumns.push(androidOtherForDate);
-                for (const branchBuilds of androidColumns) {
+                for (const branchBuilds of [androidTestForDate, androidPreForDate]) {
                     const androidCell = document.createElement('div');
                     androidCell.className = 'platform-cell android';
                     if (branchBuilds[i]) {

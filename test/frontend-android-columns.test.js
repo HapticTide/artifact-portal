@@ -34,11 +34,10 @@ function build(branch, day) {
     };
 }
 
-test('desktop history retains other Android branches and dates', () => {
+test('desktop history groups every non-pre Android branch in the test column', () => {
     const { portal, rows } = portalWithDocument();
     const history = node();
-    const otherHeader = node();
-    portal.els = { history, androidOtherHeader: otherHeader };
+    portal.els = { history };
     portal.detectPlatform = () => 'other';
     portal.formatDateGroupTitle = date => date;
     portal.renderVersionItem = item => ({ buildId: item.id });
@@ -54,20 +53,21 @@ test('desktop history retains other Android branches and dates', () => {
     visit(rows);
     assert.deepEqual(rendered.sort(), portal.allBuilds.map(item => item.id).sort());
     assert.equal(rows.children[0].children.length, 2); // dev-only date remains visible
-    assert.equal(otherHeader.hidden, false);
-    assert.equal(history.classList['has-other-android'], true);
+    const devRow = rows.children[0].children[1];
+    assert.equal(devRow.children[1].children[1].children[0].buildId, 'android_dev_17');
+    assert.equal(devRow.children[1].children.length, 3);
 });
 
-test('Android device keeps test and pre latest cards adjacent before iOS', () => {
+test('latest cards always appear in iOS, test, pre order', () => {
     const { portal } = portalWithDocument();
     const ios = node();
     const testCard = node();
     const preCard = node();
-    const cards = [ios, testCard, preCard];
+    const cards = [testCard, preCard, ios];
     const container = {
-        insertBefore(item, before) {
+        appendChild(item) {
             cards.splice(cards.indexOf(item), 1);
-            cards.splice(cards.indexOf(before), 0, item);
+            cards.push(item);
         },
     };
     ios.parentElement = container;
@@ -76,5 +76,5 @@ test('Android device keeps test and pre latest cards adjacent before iOS', () =>
 
     portal.reorderPlatformSections();
 
-    assert.deepEqual(cards, [testCard, preCard, ios]);
+    assert.deepEqual(cards, [ios, testCard, preCard]);
 });

@@ -454,11 +454,11 @@ router.get('/api/builds', async (req, res) => {
 /**
  * GET /api/builds/latest - 获取最新构建（分平台）
  * 同时返回 iOS 和 Android 的最新构建
- * Query: branch, env（可选 pre|production；省略或 all = 不按身份过滤，取时间最新；sandbox→pre）
+ * Query: branch, excludeBranch（仅 Android）, env（iOS pre|production；省略或 all = 不按身份过滤）
  */
 router.get('/api/builds/latest', async (req, res) => {
     try {
-        const { branch, env } = req.query;
+        const { branch, env, excludeBranch } = req.query;
         let filterEnv = null;
         // 未传 / 空 / all：不限身份，返回真正时间最新
         if (env !== undefined && env !== null && String(env).trim() !== '' && String(env).toLowerCase() !== 'all') {
@@ -472,6 +472,7 @@ router.get('/api/builds/latest', async (req, res) => {
         const result = await artifactManager.getLatestByPlatform({
             branch: branch || null,
             env: filterEnv,
+            excludeBranch: excludeBranch || null,
         });
 
         res.json({

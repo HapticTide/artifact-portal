@@ -2389,10 +2389,6 @@ body {
         grid-template-columns: repeat(3, minmax(0, 1fr));
     }
 
-    .all-versions-card.has-other-android .all-versions-header,
-    .all-versions-card.has-other-android .date-row-content {
-        grid-template-columns: repeat(4, minmax(0, 1fr));
-    }
 }
 
 #android-pre-section .platform-secondary-actions .qr-toggle-btn,

@@ -710,7 +710,7 @@ class ArtifactManager {
     async getLatestByPlatform(options = {}) {
         // env 为空 / null / all：不按身份过滤，取时间上真正最新的包（pre 或 production）
         // env=pre|production：只取该身份下最新
-        const { branch = null, env = null } = options;
+        const { branch = null, env = null, excludeBranch = null } = options;
 
         await this._ensureCache();
 
@@ -728,6 +728,9 @@ class ArtifactManager {
         let androidBuilds = this._androidCache;
         if (branch) {
             androidBuilds = androidBuilds.filter(b => b.branch === branch);
+        }
+        if (excludeBranch) {
+            androidBuilds = androidBuilds.filter(b => b.branch !== excludeBranch);
         }
         const latestAndroid = androidBuilds.length > 0 ? this._formatAndroidBuild(androidBuilds[0]) : null;
 
