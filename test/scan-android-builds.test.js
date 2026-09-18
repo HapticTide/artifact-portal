@@ -4,6 +4,8 @@ import { mkdtemp, mkdir, rm, writeFile, readdir, stat } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import config from '../src/server/config.js';
 import { artifactManager } from '../src/server/artifacts.js';
 
@@ -52,6 +54,39 @@ test('_scanAndroidBuilds scans new version-directory structure', async () => {
         assert.equal(builds[0].branch, 'origin_dev');
         assert.equal(builds[1].version, '1.2.0');
         assert.equal(builds[1].build, '100');
+    } finally {
+        restore();
+        await rm(buildsDir, { recursive: true, force: true });
+    }
+});
+
+test('_scanAndroidBuilds separates app display names from Git branch', async () => {
+    const buildsDir = await mkdtemp(join(tmpdir(), 'scan-android-env-'));
+    const restore = withBuildsDir(buildsDir);
+    const sourceDir = join(buildsDir, 'apk-source');
+    try {
+        await mkdir(sourceDir);
+        const createApk = async (name, appName) => {
+            const targetDir = join(buildsDir, 'android/test/1.0.0.10');
+            await mkdir(targetDir, { recursive: true });
+            await writeFile(join(sourceDir, 'AndroidManifest.xml'), `<manifest><application android:label="${appName}"/></manifest>`);
+            await promisify(execFile)('zip', ['-q', join(targetDir, name), 'AndroidManifest.xml'], { cwd: sourceDir });
+        };
+        await createApk('AppTest_v1.0.0.10_09_18_10_00_online-release.apk', 'IMWE Test');
+        await createApk('AppPre_v1.0.0.10_09_18_10_01_online-release.apk', 'IMWE Pre');
+
+        artifactManager.invalidateCache();
+        const builds = await artifactManager._scanAndroidBuilds();
+        assert.deepEqual(builds.map(item => item.env).sort(), ['pre', 'test']);
+        assert.equal(new Set(builds.map(item => item.id)).size, 2);
+        assert.ok(builds.every(item => item.branch === 'test'));
+
+        const replaced = 'AppTest_v1.0.0.10_09_18_10_00_online-release.apk';
+        await rm(join(buildsDir, 'android/test/1.0.0.10', replaced));
+        await createApk(replaced, 'IMWE Preview');
+        artifactManager.invalidateCache();
+        const rescanned = await artifactManager._scanAndroidBuilds();
+        assert.equal(rescanned.find(item => item.filename === replaced).env, 'pre');
     } finally {
         restore();
         await rm(buildsDir, { recursive: true, force: true });
