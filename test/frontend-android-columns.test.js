@@ -23,7 +23,7 @@ function portalWithDocument() {
     };
     const context = vm.createContext({ console, document, navigator: { userAgent: '' }, window: {} });
     vm.runInContext(`${source}\nglobalThis.ArtifactPortal = ArtifactPortal;`, context);
-    return { portal: new context.ArtifactPortal(), rows };
+    return { portal: new context.ArtifactPortal(), rows, context };
 }
 
 function build(branch, day) {
@@ -56,6 +56,45 @@ test('desktop history groups every non-pre Android branch in the test column', (
     const devRow = rows.children[0].children[1];
     assert.equal(devRow.children[1].children[1].children[0].buildId, 'android_dev_17');
     assert.equal(devRow.children[1].children.length, 3);
+});
+
+test('desktop Android branch selection filters only the test column', () => {
+    const { portal, rows } = portalWithDocument();
+    portal.els = { history: node() };
+    portal.detectPlatform = () => 'other';
+    portal.formatDateGroupTitle = date => date;
+    portal.renderVersionItem = item => ({ buildId: item.id });
+    portal.androidBranch = 'dev';
+    portal.allBuilds = [build('test', '18'), build('pre', '18'), build('dev', '17')];
+
+    portal.renderVersionLists();
+
+    const rendered = [];
+    function visit(item) {
+        if (item.buildId) rendered.push(item.buildId);
+        for (const child of item.children || []) visit(child);
+    }
+    visit(rows);
+    assert.deepEqual(rendered.sort(), ['android_dev_17', 'android_pre_18']);
+});
+
+test('Android mobile branch list includes pre while desktop test list excludes it', async () => {
+    const { portal, context } = portalWithDocument();
+    function select() {
+        return {
+            options: [{ value: '' }], value: '',
+            remove(index) { this.options.splice(index, 1); },
+            appendChild(option) { this.options.push(option); },
+        };
+    }
+    const desktop = select();
+    const mobile = select();
+    portal.els = { iosBranchFilter: select(), androidBranchFilter: desktop, mobileBranchFilter: mobile };
+    portal.mobilePlatform = 'android';
+    context.fetch = async () => ({ json: async () => ({ success: true, data: { android: ['test', 'pre', 'dev'] } }) });
+    await portal.loadBranches();
+    assert.deepEqual(desktop.options.map(option => option.value), ['', 'test', 'dev']);
+    assert.deepEqual(mobile.options.map(option => option.value), ['', 'test', 'pre', 'dev']);
 });
 
 test('latest cards always appear in iOS, test, pre order', () => {

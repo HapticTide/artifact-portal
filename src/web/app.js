@@ -146,6 +146,7 @@ class ArtifactPortal {
         this.iosBranch = '';
         this.iosEnv = '';
         this.androidBranch = '';
+        this.mobileAndroidBranch = '';
 
         // 移动端当前选中的平台（全局）
         this.mobilePlatform = 'ios';
@@ -362,7 +363,7 @@ class ArtifactPortal {
             if (this.mobilePlatform === 'ios') {
                 this.iosBranch = branch;
             } else {
-                this.androidBranch = branch;
+                this.mobileAndroidBranch = branch;
             }
             this.renderVersionLists();
         });
@@ -466,18 +467,14 @@ class ArtifactPortal {
         if (!this.els.mobileBranchFilter) return;
 
         // 根据当前平台切换分支列表
-        const sourceSelect = this.mobilePlatform === 'ios'
-            ? this.els.iosBranchFilter
-            : this.els.androidBranchFilter;
-
-        if (!sourceSelect) return;
-
-        // 复制选项
-        this.els.mobileBranchFilter.innerHTML = sourceSelect.innerHTML;
-
-        // 设置当前选中值
-        const currentBranch = this.mobilePlatform === 'ios' ? this.iosBranch : this.androidBranch;
-        this.els.mobileBranchFilter.value = currentBranch;
+        if (this.mobilePlatform === 'ios') {
+            if (!this.els.iosBranchFilter) return;
+            this.els.mobileBranchFilter.innerHTML = this.els.iosBranchFilter.innerHTML;
+            this.els.mobileBranchFilter.value = this.iosBranch;
+        } else {
+            this.populateBranchSelect(this.els.mobileBranchFilter, this.androidBranches || []);
+            this.els.mobileBranchFilter.value = this.mobileAndroidBranch;
+        }
     }
 
     /** Android 没有 iOS 包身份概念，切换平台时隐藏无效筛选器。 */
@@ -821,7 +818,9 @@ class ArtifactPortal {
 
                 // Android 分支
                 const androidBranches = branches.android || branches.all || [];
-                this.populateBranchSelect(this.els.androidBranchFilter, androidBranches);
+                this.androidBranches = androidBranches;
+                this.populateBranchSelect(this.els.androidBranchFilter, androidBranches.filter(branch => branch !== 'pre'));
+                if (this.mobilePlatform === 'android') this.updateMobileBranchFilter();
             }
         } catch (err) {
             console.error('加载分支失败:', err);
@@ -1044,9 +1043,6 @@ class ArtifactPortal {
         if (this.iosEnv) {
             iosBuilds = iosBuilds.filter(b => b.platforms.ios.env === this.iosEnv);
         }
-        if (this.androidBranch) {
-            androidBuilds = androidBuilds.filter(b => b.platforms.android.branch === this.androidBranch);
-        }
 
         // 检测设备类型
         const platform = this.detectPlatform();
@@ -1054,19 +1050,24 @@ class ArtifactPortal {
 
         if (isMobile) {
             // 移动端：只显示当前选中平台的构建
-            const builds = this.mobilePlatform === 'ios' ? iosBuilds : androidBuilds;
+            const builds = this.mobilePlatform === 'ios' ? iosBuilds : androidBuilds.filter(b =>
+                !this.mobileAndroidBranch || b.platforms.android.branch === this.mobileAndroidBranch);
             this.renderSingleColumnList(builds, this.mobilePlatform);
         } else {
             // 桌面端：所有非 pre Android 构建归入 test 列。
+            const androidTestBuilds = androidBuilds.filter(b => b.platforms.android.branch !== 'pre' &&
+                (!this.androidBranch || b.platforms.android.branch === this.androidBranch));
+            const androidPreBuilds = androidBuilds.filter(b => b.platforms.android.branch === 'pre');
             const allDates = new Set();
             iosBuilds.forEach(b => allDates.add(this.getDateKey(b.time)));
-            androidBuilds.forEach(b => allDates.add(this.getDateKey(b.time)));
+            androidTestBuilds.forEach(b => allDates.add(this.getDateKey(b.time)));
+            androidPreBuilds.forEach(b => allDates.add(this.getDateKey(b.time)));
             const sortedDates = Array.from(allDates).sort((a, b) => b.localeCompare(a));
 
             // 按日期分组
             const iosByDate = this.groupByDate(iosBuilds);
-            const androidTestByDate = this.groupByDate(androidBuilds.filter(b => b.platforms.android.branch !== 'pre'));
-            const androidPreByDate = this.groupByDate(androidBuilds.filter(b => b.platforms.android.branch === 'pre'));
+            const androidTestByDate = this.groupByDate(androidTestBuilds);
+            const androidPreByDate = this.groupByDate(androidPreBuilds);
             this.renderDateAlignedRows(sortedDates, iosByDate, androidTestByDate, androidPreByDate);
         }
 
