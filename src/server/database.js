@@ -89,10 +89,12 @@ console.log('[Database] SQLite 数据库已初始化:', DB_PATH);
  * 数据库操作类
  */
 class BuildDatabase {
-    migrateLegacyAndroidBuild({ dir, branch, version, build }) {
+    migrateLegacyAndroidBuild({ dir, branch, version, build, filePath }) {
         const legacyDir = `android_${branch}_${version}_${build}`;
-        const legacy = db.prepare('SELECT id FROM builds WHERE dir = ?').get(legacyDir);
-        if (!legacy || db.prepare('SELECT id FROM builds WHERE dir = ?').get(dir)) return;
+        const legacy = db.prepare('SELECT id, file_path FROM builds WHERE dir = ?').get(legacyDir);
+        // 旧行只有指向同一个 APK 时才是该 pre 构建；其他行应保留历史统计。
+        if (legacy?.file_path !== filePath) return;
+        if (db.prepare('SELECT id FROM builds WHERE dir = ?').get(dir)) return;
         db.prepare(`UPDATE builds SET dir = ?, env = 'pre', updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
             .run(dir, legacy.id);
     }

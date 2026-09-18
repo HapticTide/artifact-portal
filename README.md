@@ -125,7 +125,7 @@ curl -X POST \
 存储路径的版本目录名为 `<version>.<build>`（从文件名自动解析，如上例中的 `1.2.0.123`），
 存储路径为 `android/<branch>/<version>.<build>/<filename>`。
 目录名带上 build 号是为了避免同一版本号下多次打包（build 递增）时互相冲突或混在一起。
-页面会读取 APK 内 `AndroidManifest.xml` 的包名：包名以 `pre` 结尾的包进入 Android pre 环境列，其他包进入 test 列。
+页面会读取 APK 安装后显示的应用名称（`AndroidManifest.xml` 的 `application` label，支持字符串资源引用）：名称中包含 `pre` 的包进入 Android pre 环境列，其他包进入 test 列。
 Git 分支与环境相互独立；test 列默认显示所有分支的 test 环境包，也可切换 Git 分支。无法读取包名的旧文件按 test 环境显示。
 
 ### 上传 Android mapping 文件

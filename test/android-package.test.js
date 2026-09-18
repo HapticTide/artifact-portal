@@ -1,77 +1,113 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { androidEnvFromPackageName, packageNameFromManifest, readApkPackageName } from '../src/server/androidPackage.js';
+import { appLabelFromManifest, stringFromResources, readApkAppName, androidEnvFromAppName } from '../src/server/androidPackage.js';
 import { mkdtemp, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 
-function binaryManifest(packageName) {
-    const strings = ['manifest', 'package', packageName];
-    const encoded = strings.map(value => {
-        const content = Buffer.from(value);
-        return Buffer.concat([Buffer.from([content.length, content.length]), content, Buffer.from([0])]);
+const LABEL_ID = 0x7f010000;
+
+function pool(strings) {
+    const values = strings.map(value => {
+        const data = Buffer.from(value);
+        return Buffer.concat([Buffer.from([value.length, data.length]), data, Buffer.from([0])]);
     });
-    const stringData = Buffer.concat(encoded);
-    const pool = Buffer.alloc(28 + strings.length * 4 + stringData.length);
-    pool.writeUInt16LE(0x0001, 0);
-    pool.writeUInt16LE(28, 2);
-    pool.writeUInt32LE(pool.length, 4);
-    pool.writeUInt32LE(strings.length, 8);
-    pool.writeUInt32LE(0x100, 16);
-    pool.writeUInt32LE(28 + strings.length * 4, 20);
+    const payload = Buffer.concat(values);
+    const chunk = Buffer.alloc(28 + values.length * 4 + payload.length);
+    chunk.writeUInt16LE(0x0001, 0);
+    chunk.writeUInt16LE(28, 2);
+    chunk.writeUInt32LE(chunk.length, 4);
+    chunk.writeUInt32LE(values.length, 8);
+    chunk.writeUInt32LE(0x100, 16);
+    chunk.writeUInt32LE(28 + values.length * 4, 20);
     let offset = 0;
-    encoded.forEach((value, index) => {
-        pool.writeUInt32LE(offset, 28 + index * 4);
+    values.forEach((value, index) => {
+        chunk.writeUInt32LE(offset, 28 + index * 4);
         offset += value.length;
     });
-    stringData.copy(pool, 28 + strings.length * 4);
+    payload.copy(chunk, 28 + values.length * 4);
+    return chunk;
+}
 
+function binaryManifest(label, reference = false) {
+    const strings = pool(['application', 'label', reference ? '@string/app_name' : label]);
     const tag = Buffer.alloc(56);
     tag.writeUInt16LE(0x0102, 0);
-    tag.writeUInt16LE(36, 2);
+    tag.writeUInt16LE(16, 2); // Real Android start-element header size
     tag.writeUInt32LE(tag.length, 4);
-    tag.writeUInt32LE(0xffffffff, 16); // namespace
-    tag.writeUInt32LE(0, 20); // manifest
-    tag.writeUInt16LE(20, 24); // attribute start relative to attrExt
+    tag.writeUInt32LE(0xffffffff, 16);
+    tag.writeUInt32LE(0, 20); // application
+    tag.writeUInt16LE(20, 24);
     tag.writeUInt16LE(20, 26);
     tag.writeUInt16LE(1, 28);
-    tag.writeUInt32LE(0xffffffff, 36); // attribute namespace
-    tag.writeUInt32LE(1, 40); // package
-    tag.writeUInt32LE(2, 44); // value
-    tag.writeUInt16LE(8, 48); // typed value size
-    tag.writeUInt8(0x03, 51); // string
-    tag.writeUInt32LE(2, 52);
-
+    tag.writeUInt32LE(0xffffffff, 36);
+    tag.writeUInt32LE(1, 40); // label
+    tag.writeUInt32LE(2, 44);
+    tag.writeUInt16LE(8, 48);
+    tag.writeUInt8(reference ? 0x01 : 0x03, 51);
+    tag.writeUInt32LE(reference ? LABEL_ID : 2, 52);
     const root = Buffer.alloc(8);
     root.writeUInt16LE(0x0003, 0);
     root.writeUInt16LE(8, 2);
-    root.writeUInt32LE(8 + pool.length + tag.length, 4);
-    return Buffer.concat([root, pool, tag]);
+    root.writeUInt32LE(root.length + strings.length + tag.length, 4);
+    return Buffer.concat([root, strings, tag]);
 }
 
-test('Android binary manifest package name determines environment, independent of branch', () => {
-    const pre = packageNameFromManifest(binaryManifest('com.imwe.app.pre'));
-    const testPackage = packageNameFromManifest(binaryManifest('com.imwe.app.test'));
-    assert.equal(pre, 'com.imwe.app.pre');
-    assert.equal(androidEnvFromPackageName(pre), 'pre');
-    assert.equal(androidEnvFromPackageName(testPackage), 'test');
+function resources(label) {
+    const strings = pool([label]);
+    const type = Buffer.alloc(64);
+    type.writeUInt16LE(0x0201, 0);
+    type.writeUInt16LE(44, 2);
+    type.writeUInt32LE(type.length, 4);
+    type.writeUInt8(1, 8);
+    type.writeUInt32LE(1, 12);
+    type.writeUInt32LE(48, 16);
+    type.writeUInt32LE(24, 20); // config size, default locale
+    type.writeUInt32LE(0, 44); // entry offset
+    type.writeUInt16LE(8, 48); // entry size
+    type.writeUInt16LE(8, 56); // value size
+    type.writeUInt8(0x03, 59); // string
+    const pack = Buffer.alloc(288 + type.length);
+    pack.writeUInt16LE(0x0200, 0);
+    pack.writeUInt16LE(288, 2);
+    pack.writeUInt32LE(pack.length, 4);
+    pack.writeUInt32LE(0x7f, 8);
+    type.copy(pack, 288);
+    const table = Buffer.alloc(12);
+    table.writeUInt16LE(0x0002, 0);
+    table.writeUInt16LE(12, 2);
+    table.writeUInt32LE(table.length + strings.length + pack.length, 4);
+    table.writeUInt32LE(1, 8);
+    return Buffer.concat([table, strings, pack]);
+}
+
+test('app label determines environment, including a name containing pre', () => {
+    assert.equal(appLabelFromManifest(binaryManifest('IMWE Pre')), 'IMWE Pre');
+    assert.equal(androidEnvFromAppName('IMWE Pre'), 'pre');
+    assert.equal(androidEnvFromAppName('IMWE Test'), 'test');
 });
 
-test('plain XML manifest and malformed APK fallback are handled', () => {
-    assert.equal(packageNameFromManifest(Buffer.from('<manifest package="com.imwe.app.pre"/>')), 'com.imwe.app.pre');
-    assert.equal(packageNameFromManifest(Buffer.from('invalid')), null);
-    assert.equal(androidEnvFromPackageName(null), 'test');
+test('resource-backed application label is resolved from resources.arsc', () => {
+    assert.equal(appLabelFromManifest(binaryManifest('', true)), LABEL_ID);
+    assert.equal(stringFromResources(resources('IMWE Pre'), LABEL_ID), 'IMWE Pre');
 });
 
-test('APK ZIP reader extracts the actual package name', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'apk-package-'));
+test('plain XML label and malformed APK fallback are handled', () => {
+    assert.equal(appLabelFromManifest(Buffer.from('<manifest><application android:label="IMWE Pre"/></manifest>')), 'IMWE Pre');
+    assert.equal(appLabelFromManifest(Buffer.from('invalid')), null);
+    assert.equal(androidEnvFromAppName(null), 'test');
+});
+
+test('APK ZIP reader extracts installed display name', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'apk-label-'));
     const apk = join(directory, 'sample.apk');
     try {
-        await writeFile(join(directory, 'AndroidManifest.xml'), binaryManifest('com.imwe.app.pre'));
-        await promisify(execFile)('zip', ['-q', apk, 'AndroidManifest.xml'], { cwd: directory });
-        assert.equal(await readApkPackageName(apk), 'com.imwe.app.pre');
+        await writeFile(join(directory, 'AndroidManifest.xml'), binaryManifest('', true));
+        await writeFile(join(directory, 'resources.arsc'), resources('IMWE Pre'));
+        await promisify(execFile)('zip', ['-q', apk, 'AndroidManifest.xml', 'resources.arsc'], { cwd: directory });
+        assert.equal(await readApkAppName(apk), 'IMWE Pre');
     } finally {
         await rm(directory, { recursive: true, force: true });
     }

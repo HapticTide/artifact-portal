@@ -31,7 +31,7 @@ import buildDatabase from './database.js';
 import { readDirSafe, getFileSize, getDiskUsage } from './utils/fs.js';
 import { formatFileSize } from './utils/format.js';
 import { androidMappingCandidates, parseApkFilename, androidVersionDirForApk } from './androidMapping.js';
-import { androidEnvFromPackageName, readApkPackageName } from './androidPackage.js';
+import { androidEnvFromAppName, readApkAppName } from './androidPackage.js';
 import { buildIosArtifactId, resolveIosEnv } from './upload.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -501,16 +501,15 @@ class ArtifactManager {
 
                     // 查找同名 mapping 文件（android/<branch>/<version>/<apkBase>.mapping.zip）
                     const mapping = this._findAndroidMapping(branch, version, apkFile);
-                    const packageName = await readApkPackageName(apkPath);
-                    const env = androidEnvFromPackageName(packageName);
+                    const appName = await readApkAppName(apkPath);
+                    const env = androidEnvFromAppName(appName);
 
                     builds.push({
                         platform: 'android',
                         branch,
                         version: parsed.version,
                         build: parsed.build,
-                        appName: parsed.appName,
-                        packageName,
+                        appName: appName || parsed.appName,
                         env,
                         filename: apkFile,
                         // 相对路径（用于下载 URL）
@@ -606,6 +605,7 @@ class ArtifactManager {
                 build.version === android.version && build.build === android.build)) {
                 buildDatabase.migrateLegacyAndroidBuild({
                     dir, branch: android.branch, version: android.version, build: android.build,
+                    filePath: android.absolutePath,
                 });
             }
             existingDirs.add(dir);
@@ -903,7 +903,7 @@ class ArtifactManager {
                     build: android.build,
                     branch: android.branch,
                     env: android.env,
-                    packageName: android.packageName || '',
+                    packageName: config.androidPackageName || '',
                     apk: android.relativePath,
                     // mapping 下载路径（无 mapping 时为 null）
                     mapping: android.mappingPath || null,
