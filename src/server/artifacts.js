@@ -156,6 +156,9 @@ class ArtifactManager {
         this._androidCache = null;
         this._cacheTime = 0;
         this._cacheTTL = config.cache.buildsTTL;
+        this._cacheGeneration = 0;
+        this._cacheRefreshPromise = null;
+        this._androidLabelCache = new Map();
     }
 
     /**
@@ -176,6 +179,7 @@ class ArtifactManager {
         this._iosCache = null;
         this._androidCache = null;
         this._cacheTime = 0;
+        this._cacheGeneration++;
     }
 
     /**
@@ -462,10 +466,12 @@ class ArtifactManager {
     async _scanAndroidBuilds() {
         const androidDir = join(this.buildsDir, 'android');
         if (!fs.existsSync(androidDir)) {
+            this._androidLabelCache.clear();
             return [];
         }
 
         const builds = [];
+        const seenApks = new Set();
         const branches = await readDirSafe(androidDir);
 
         for (const branch of branches) {
@@ -498,10 +504,17 @@ class ArtifactManager {
                     const fileStat = fs.statSync(apkPath);
                     const fileSize = fileStat.size;
                     const mtime = fileStat.mtime;
+                    seenApks.add(apkPath);
 
                     // 查找同名 mapping 文件（android/<branch>/<version>/<apkBase>.mapping.zip）
                     const mapping = this._findAndroidMapping(branch, version, apkFile);
-                    const appName = await readApkAppName(apkPath);
+                    const cachedLabel = this._androidLabelCache.get(apkPath);
+                    const appName = cachedLabel?.size === fileSize &&
+                        cachedLabel.mtimeMs === fileStat.mtimeMs && cachedLabel.ctimeMs === fileStat.ctimeMs
+                        ? cachedLabel.appName : await readApkAppName(apkPath);
+                    this._androidLabelCache.set(apkPath, {
+                        size: fileSize, mtimeMs: fileStat.mtimeMs, ctimeMs: fileStat.ctimeMs, appName,
+                    });
                     const env = androidEnvFromAppName(appName);
 
                     builds.push({
@@ -528,6 +541,10 @@ class ArtifactManager {
             }
         }
 
+        for (const apkPath of this._androidLabelCache.keys()) {
+            if (!seenApks.has(apkPath)) this._androidLabelCache.delete(apkPath);
+        }
+
         // 按时间倒序排序
         builds.sort((a, b) => new Date(b.time) - new Date(a.time));
         return builds;
@@ -537,14 +554,23 @@ class ArtifactManager {
      * 确保缓存有效
      */
     async _ensureCache() {
-        if (!this._isCacheValid()) {
-            this._iosCache = await this._scanIosBuilds();
-            this._androidCache = await this._scanAndroidBuilds();
-            this._cacheTime = Date.now();
-
-            // 同步数据到 SQLite
-            this._syncToDatabase();
+        if (this._isCacheValid()) return;
+        if (!this._cacheRefreshPromise) {
+            this._cacheRefreshPromise = (async () => {
+                while (!this._isCacheValid()) {
+                    const generation = this._cacheGeneration;
+                    const iosBuilds = await this._scanIosBuilds();
+                    const androidBuilds = await this._scanAndroidBuilds();
+                    // 上传可能在扫描期间使缓存失效，重新读取以免覆盖新文件。
+                    if (generation !== this._cacheGeneration) continue;
+                    this._iosCache = iosBuilds;
+                    this._androidCache = androidBuilds;
+                    this._syncToDatabase();
+                    this._cacheTime = Date.now();
+                }
+            })().finally(() => { this._cacheRefreshPromise = null; });
         }
+        await this._cacheRefreshPromise;
     }
 
     /**
@@ -600,9 +626,7 @@ class ArtifactManager {
         // 收集 Android 构建
         for (const android of this._androidCache) {
             const dir = android.id;
-            if (android.env === 'pre' && !this._androidCache.some(build =>
-                build.env === 'test' && build.branch === android.branch &&
-                build.version === android.version && build.build === android.build)) {
+            if (android.env === 'pre') {
                 buildDatabase.migrateLegacyAndroidBuild({
                     dir, branch: android.branch, version: android.version, build: android.build,
                     filePath: android.absolutePath,
@@ -722,7 +746,7 @@ class ArtifactManager {
     async getLatestByPlatform(options = {}) {
         // env 为空 / null / all：不按身份过滤，取时间上真正最新的包（pre 或 production）
         // env=pre|production：只取该身份下最新
-        const { branch = null, env = null, androidEnv = null, excludeBranch = null } = options;
+        const { branch = null, env = null, androidEnv = null } = options;
 
         await this._ensureCache();
 
@@ -740,9 +764,6 @@ class ArtifactManager {
         let androidBuilds = this._androidCache;
         if (branch) {
             androidBuilds = androidBuilds.filter(b => b.branch === branch);
-        }
-        if (excludeBranch) {
-            androidBuilds = androidBuilds.filter(b => b.branch !== excludeBranch);
         }
         if (androidEnv) {
             androidBuilds = androidBuilds.filter(b => b.env === androidEnv);

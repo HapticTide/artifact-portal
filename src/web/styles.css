@@ -1153,7 +1153,7 @@ body {
     }
 }
 
-/* 列头（双列） */
+/* 列头 */
 .all-versions-header {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -1212,7 +1212,7 @@ body {
     gap: 0;
 }
 
-/* 每个日期行（包含日期头 + 双列构建） */
+/* 每个日期行（包含日期头和构建列） */
 .date-row {
     border-bottom: 1px solid var(--border);
     padding-bottom: var(--spacing-sm);
@@ -1237,7 +1237,7 @@ body {
     z-index: 1;
 }
 
-/* 双列构建内容（桌面端） */
+/* 构建内容（桌面端） */
 .date-row-content {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -2372,6 +2372,11 @@ body {
 /* 最新构建：iOS、Android test、Android pre 各占一列。 */
 @media (min-width: 769px) {
     .latest-card .platforms {
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    }
+
+    .all-versions-header,
+    .date-row-content {
         grid-template-columns: repeat(3, minmax(0, 1fr));
     }
 }
@@ -2383,14 +2388,6 @@ body {
     }
 }
 
-@media (min-width: 769px) {
-    .all-versions-header,
-    .date-row-content {
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-    }
-
-}
-
 #android-pre-section .platform-secondary-actions .qr-toggle-btn,
 #android-pre-section .btn-link {
     color: #2EBD68;
@@ -2400,11 +2397,5 @@ body {
     #android-section .platform-header.desktop-only,
     #android-pre-section .platform-header.desktop-only {
         display: flex !important;
-    }
-}
-
-@media (min-width: 769px) {
-    .latest-card .platforms:has(#ios-section[hidden]) {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 }

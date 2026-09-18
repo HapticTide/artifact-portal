@@ -438,8 +438,8 @@ class ArtifactPortal {
             if (this.latestByPlatform?.ios?.platforms?.ios?.available) {
                 this.els.iosSection.hidden = !showIos;
             }
-            this.els.androidSection.hidden = !showAndroid || !this.latestAndroidBranches?.test;
-            this.els.androidPreSection.hidden = !showAndroid || !this.latestAndroidBranches?.pre;
+            this.els.androidSection.hidden = !showAndroid || !this.latestAndroidEnvs?.test;
+            this.els.androidPreSection.hidden = !showAndroid || !this.latestAndroidEnvs?.pre;
         }
         // 桌面端：由 renderLatestBuild 控制，根据数据可用性显示
     }
@@ -503,7 +503,7 @@ class ArtifactPortal {
             }
 
             // 设置默认选中的平台（根据设备类型）
-            this.mobilePlatform = platform === 'ios' && !this.latestByPlatform?.ios && (this.latestAndroidBranches?.test || this.latestAndroidBranches?.pre)
+            this.mobilePlatform = platform === 'ios' && !this.latestByPlatform?.ios && (this.latestAndroidEnvs?.test || this.latestAndroidEnvs?.pre)
                 ? 'android' : platform;
 
             // 更新标签状态
@@ -706,7 +706,7 @@ class ArtifactPortal {
                 if (latestData.success) {
                     this.latestByPlatform = latestData.data;
                     const [testData, preData] = await Promise.all([testRes.json(), preRes.json()]);
-                    this.latestAndroidBranches = {
+                    this.latestAndroidEnvs = {
                         test: testData.success ? testData.data.android : null,
                         pre: preData.success ? preData.data.android : null,
                     };
@@ -734,7 +734,7 @@ class ArtifactPortal {
 
             // 检查是否完全没有构建数据
             const hasIosLatest = this.latestByPlatform?.ios != null;
-            const hasAndroidLatest = Boolean(this.latestAndroidBranches?.test || this.latestAndroidBranches?.pre);
+            const hasAndroidLatest = Boolean(this.latestAndroidEnvs?.test || this.latestAndroidEnvs?.pre);
             const hasAnyData = this.builds.length > 0 || hasIosLatest || hasAndroidLatest;
 
             if (!hasAnyData) {
@@ -778,7 +778,7 @@ class ArtifactPortal {
     updateLatestIds() {
         this.latestIds = new Set();
         if (this.latestByPlatform?.ios) this.latestIds.add(this.latestByPlatform.ios.id);
-        for (const build of Object.values(this.latestAndroidBranches || {})) {
+        for (const build of Object.values(this.latestAndroidEnvs || {})) {
             if (build) this.latestIds.add(build.id);
         }
     }
@@ -869,8 +869,8 @@ class ArtifactPortal {
         } else {
             // 默认模式：使用各平台最新
             iosBuild = this.latestByPlatform?.ios;
-            androidBuild = this.latestAndroidBranches?.test;
-            if (!singleBuild) this.renderAndroidLatest(this.latestAndroidBranches?.pre, 'android-pre');
+            androidBuild = this.latestAndroidEnvs?.test;
+            if (!singleBuild) this.renderAndroidLatest(this.latestAndroidEnvs?.pre, 'android-pre');
         }
 
         // 更新应用图标（优先从 iOS 构建获取）
@@ -918,7 +918,7 @@ class ArtifactPortal {
         }
 
         const androidAvailable = this.renderAndroidLatest(androidBuild, 'android');
-        const androidPreAvailable = singleBuild ? false : Boolean(this.latestAndroidBranches?.pre?.platforms?.android?.available);
+        const androidPreAvailable = singleBuild ? false : Boolean(this.latestAndroidEnvs?.pre?.platforms?.android?.available);
 
         // 设置平台区域可见性
         if (isMobile) {
@@ -1007,7 +1007,7 @@ class ArtifactPortal {
     }
 
     /**
-     * 渲染所有构建列表（iOS、Android 非 pre、Android pre）
+     * 渲染所有构建列表（iOS、Android test 环境、Android pre 环境）
      * 按天分组展示
      */
     renderHistory(builds, append = false) {
@@ -1024,7 +1024,7 @@ class ArtifactPortal {
 
     /**
      * 渲染版本列表（根据筛选条件）
-     * 按日期分组，每行对齐各平台和分支单元格
+     * 按日期分组，每行对齐各平台和环境单元格
      */
     renderVersionLists() {
         if (!this.allBuilds || this.allBuilds.length === 0) {
@@ -1034,7 +1034,7 @@ class ArtifactPortal {
 
         // 分离并筛选 iOS 和 Android 构建
         let iosBuilds = this.allBuilds.filter(b => b.platforms?.ios?.available);
-        let androidBuilds = this.allBuilds.filter(b => b.platforms?.android?.available);
+        const androidBuilds = this.allBuilds.filter(b => b.platforms?.android?.available);
 
         // 应用分支 / 身份筛选
         if (this.iosBranch) {
@@ -1136,23 +1136,15 @@ class ArtifactPortal {
 
         container.innerHTML = '';
 
-        // 只保留有可见构建的日期。
-        const validDates = sortedDates.filter(dateKey => {
-            const iosCount = (iosByDate[dateKey] || []).length;
-            const androidCount = (androidTestByDate[dateKey] || []).length
-                + (androidPreByDate[dateKey] || []).length;
-            return iosCount > 0 || androidCount > 0;
-        });
-
         // 检查是否有任何构建
-        if (validDates.length === 0) {
+        if (sortedDates.length === 0) {
             container.innerHTML = '<div class="date-row"><div class="date-row-header">暂无构建</div></div>';
             return;
         }
 
         const fragment = document.createDocumentFragment();
 
-        validDates.forEach(dateKey => {
+        sortedDates.forEach(dateKey => {
             const iosBuildsForDate = iosByDate[dateKey] || [];
             const androidTestForDate = androidTestByDate[dateKey] || [];
             const androidPreForDate = androidPreByDate[dateKey] || [];

@@ -80,6 +80,13 @@ test('_scanAndroidBuilds separates app display names from Git branch', async () 
         assert.deepEqual(builds.map(item => item.env).sort(), ['pre', 'test']);
         assert.equal(new Set(builds.map(item => item.id)).size, 2);
         assert.ok(builds.every(item => item.branch === 'test'));
+
+        const replaced = 'AppTest_v1.0.0.10_09_18_10_00_online-release.apk';
+        await rm(join(buildsDir, 'android/test/1.0.0.10', replaced));
+        await createApk(replaced, 'IMWE Preview');
+        artifactManager.invalidateCache();
+        const rescanned = await artifactManager._scanAndroidBuilds();
+        assert.equal(rescanned.find(item => item.filename === replaced).env, 'pre');
     } finally {
         restore();
         await rm(buildsDir, { recursive: true, force: true });

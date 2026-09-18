@@ -454,12 +454,12 @@ router.get('/api/builds', async (req, res) => {
 /**
  * GET /api/builds/latest - 获取最新构建（分平台）
  * 同时返回 iOS 和 Android 的最新构建
- * Query: branch, androidEnv（Android test|pre）, excludeBranch（兼容旧客户端）,
+ * Query: branch, androidEnv（Android test|pre）,
  *        env（iOS pre|production；省略或 all = 不按身份过滤）
  */
 router.get('/api/builds/latest', async (req, res) => {
     try {
-        const { branch, env, androidEnv, excludeBranch } = req.query;
+        const { branch, env, androidEnv } = req.query;
         if (androidEnv && !['test', 'pre'].includes(androidEnv)) {
             return res.status(400).json({ success: false, error: 'androidEnv 仅接受 test / pre' });
         }
@@ -477,7 +477,6 @@ router.get('/api/builds/latest', async (req, res) => {
             branch: branch || null,
             env: filterEnv,
             androidEnv: androidEnv || null,
-            excludeBranch: excludeBranch || null,
         });
 
         res.json({

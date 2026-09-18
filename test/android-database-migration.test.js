@@ -17,17 +17,18 @@ after(async () => {
     await rm(buildsDir, { recursive: true, force: true });
 });
 
-function addLegacy(dir, filePath) {
+function addLegacy(build, filePath) {
+    const dir = `android_dev_1.0.0_${build}`;
     db.prepare(`
         INSERT INTO builds (dir, platform, branch, env, version, build, size, time, file_path)
         VALUES (?, 'android', 'dev', 'production', '1.0.0', ?, 123, '2026-09-18T10:00:00Z', ?)
-    `).run(dir, dir.endsWith('_10') ? '10' : '11', filePath);
+    `).run(dir, build, filePath);
 }
 
 test('different APK path keeps the old test history row', () => {
     const oldPath = join(buildsDir, 'android/dev/1.0.0.10/old-test.apk');
     const prePath = join(buildsDir, 'android/dev/1.0.0.10/new-pre.apk');
-    addLegacy('android_dev_1.0.0_10', oldPath);
+    addLegacy('10', oldPath);
     buildDatabase.migrateLegacyAndroidBuild({
         dir: 'android_dev_1.0.0_10_pre', branch: 'dev', version: '1.0.0', build: '10', filePath: prePath,
     });
@@ -38,7 +39,7 @@ test('different APK path keeps the old test history row', () => {
 
 test('same APK path migrates its existing history row', () => {
     const prePath = join(buildsDir, 'android/dev/1.0.0.11/pre.apk');
-    addLegacy('android_dev_1.0.0_11', prePath);
+    addLegacy('11', prePath);
     buildDatabase.migrateLegacyAndroidBuild({
         dir: 'android_dev_1.0.0_11_pre', branch: 'dev', version: '1.0.0', build: '11', filePath: prePath,
     });
