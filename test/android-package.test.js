@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { appLabelFromManifest, stringFromResources, readApkAppName, androidEnvFromAppName } from '../src/server/androidPackage.js';
+import { appLabelFromManifest, readApkAppName, androidEnvFromAppName } from '../src/server/androidPackage.js';
 import { mkdtemp, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -55,43 +55,14 @@ function binaryManifest(label, reference = false) {
     return Buffer.concat([root, strings, tag]);
 }
 
-function resources(label) {
-    const strings = pool([label]);
-    const type = Buffer.alloc(64);
-    type.writeUInt16LE(0x0201, 0);
-    type.writeUInt16LE(44, 2);
-    type.writeUInt32LE(type.length, 4);
-    type.writeUInt8(1, 8);
-    type.writeUInt32LE(1, 12);
-    type.writeUInt32LE(48, 16);
-    type.writeUInt32LE(24, 20); // config size, default locale
-    type.writeUInt32LE(0, 44); // entry offset
-    type.writeUInt16LE(8, 48); // entry size
-    type.writeUInt16LE(8, 56); // value size
-    type.writeUInt8(0x03, 59); // string
-    const pack = Buffer.alloc(288 + type.length);
-    pack.writeUInt16LE(0x0200, 0);
-    pack.writeUInt16LE(288, 2);
-    pack.writeUInt32LE(pack.length, 4);
-    pack.writeUInt32LE(0x7f, 8);
-    type.copy(pack, 288);
-    const table = Buffer.alloc(12);
-    table.writeUInt16LE(0x0002, 0);
-    table.writeUInt16LE(12, 2);
-    table.writeUInt32LE(table.length + strings.length + pack.length, 4);
-    table.writeUInt32LE(1, 8);
-    return Buffer.concat([table, strings, pack]);
-}
-
 test('app label determines environment, including a name containing pre', () => {
     assert.equal(appLabelFromManifest(binaryManifest('IMWE Pre')), 'IMWE Pre');
     assert.equal(androidEnvFromAppName('IMWE Pre'), 'pre');
     assert.equal(androidEnvFromAppName('IMWE Test'), 'test');
 });
 
-test('resource-backed application label is resolved from resources.arsc', () => {
-    assert.equal(appLabelFromManifest(binaryManifest('', true)), LABEL_ID);
-    assert.equal(stringFromResources(resources('IMWE Pre'), LABEL_ID), 'IMWE Pre');
+test('resource references are not mistaken for literal app names', () => {
+    assert.equal(appLabelFromManifest(binaryManifest('', true)), null);
 });
 
 test('plain XML label and malformed APK fallback are handled', () => {
@@ -104,9 +75,8 @@ test('APK ZIP reader extracts installed display name', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'apk-label-'));
     const apk = join(directory, 'sample.apk');
     try {
-        await writeFile(join(directory, 'AndroidManifest.xml'), binaryManifest('', true));
-        await writeFile(join(directory, 'resources.arsc'), resources('IMWE Pre'));
-        await promisify(execFile)('zip', ['-q', apk, 'AndroidManifest.xml', 'resources.arsc'], { cwd: directory });
+        await writeFile(join(directory, 'AndroidManifest.xml'), binaryManifest('IMWE Pre'));
+        await promisify(execFile)('zip', ['-q', apk, 'AndroidManifest.xml'], { cwd: directory });
         assert.equal(await readApkAppName(apk), 'IMWE Pre');
     } finally {
         await rm(directory, { recursive: true, force: true });

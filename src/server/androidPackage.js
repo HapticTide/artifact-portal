@@ -50,12 +50,13 @@ function stringAt(pool, index) {
     return cursor + size * 2 <= pool.end ? bytes.toString('utf16le', cursor, cursor + size * 2) : null;
 }
 
-/** Return the installed app label as a literal string or Android resource ID. */
+/** Return a literal application label from AndroidManifest.xml. */
 export function appLabelFromManifest(bytes) {
     if (!Buffer.isBuffer(bytes) || bytes.length < 8) return null;
     if (bytes.readUInt16LE(0) !== 0x0003) {
         const tag = /<application\b[^>]*>/i.exec(bytes.toString('utf8'))?.[0];
-        return tag ? /(?:android:)?label\s*=\s*["']([^"']+)["']/i.exec(tag)?.[1] || null : null;
+        const label = tag ? /(?:android:)?label\s*=\s*["']([^"']+)["']/i.exec(tag)?.[1] : null;
+        return label && !label.startsWith('@') ? label : null;
     }
     const limit = Math.min(bytes.readUInt32LE(4), bytes.length);
     let pool = null;
@@ -74,9 +75,10 @@ export function appLabelFromManifest(bytes) {
                 if (stringAt(pool, bytes.readUInt32LE(attr + 4)) !== 'label') continue;
                 const type = bytes.readUInt8(attr + 15);
                 const value = bytes.readUInt32LE(attr + 16);
-                if (type === 0x01) return value;
+                if (type === 0x01) return null;
                 const raw = stringAt(pool, bytes.readUInt32LE(attr + 8));
-                return raw || (type === 0x03 ? stringAt(pool, value) : null);
+                const label = raw || (type === 0x03 ? stringAt(pool, value) : null);
+                return label && !label.startsWith('@') ? label : null;
             }
             return null;
         }
@@ -85,83 +87,22 @@ export function appLabelFromManifest(bytes) {
     return null;
 }
 
-/** Resolve a string resource, preferring the default locale. */
-export function stringFromResources(bytes, resourceId) {
-    if (!Buffer.isBuffer(bytes) || bytes.length < 12 || !Number.isInteger(resourceId)) return null;
-    const table = chunkAt(bytes, 0);
-    if (!table || table.type !== 0x0002 || table.header < 12) return null;
-    let strings = null;
-    let fallback = null;
-    for (let cursor = table.header; cursor + 8 <= table.end;) {
-        const chunk = chunkAt(bytes, cursor, table.end);
-        if (!chunk) break;
-        if (chunk.type === 0x0001) strings = stringPool(bytes, chunk);
-        if (chunk.type === 0x0200 && chunk.header >= 12 && bytes.readUInt32LE(cursor + 8) === (resourceId >>> 24)) {
-            for (let inner = cursor + chunk.header; inner + 8 <= chunk.end;) {
-                const typeChunk = chunkAt(bytes, inner, chunk.end);
-                if (!typeChunk) break;
-                if (typeChunk.type === 0x0201 && typeChunk.header >= 24 &&
-                    bytes.readUInt8(inner + 8) === ((resourceId >>> 16) & 0xff)) {
-                    const index = resourceId & 0xffff;
-                    const count = bytes.readUInt32LE(inner + 12);
-                    const start = bytes.readUInt32LE(inner + 16);
-                    const offsets = inner + typeChunk.header;
-                    const flags = bytes.readUInt8(inner + 9);
-                    if (count <= 100000 && offsets + count * (flags & 1 ? 4 : flags & 2 ? 2 : 4) <= typeChunk.end) {
-                        let offset = 0xffffffff;
-                        if (flags & 1) {
-                            for (let i = 0; i < count; i++) {
-                                if (bytes.readUInt16LE(offsets + i * 4) === index) {
-                                    offset = bytes.readUInt16LE(offsets + i * 4 + 2) * 4;
-                                    break;
-                                }
-                            }
-                        } else if (index < count && flags & 2) {
-                            const shortOffset = bytes.readUInt16LE(offsets + index * 2);
-                            if (shortOffset !== 0xffff) offset = shortOffset * 4;
-                        } else if (index < count) {
-                            offset = bytes.readUInt32LE(offsets + index * 4);
-                        }
-                        const entry = inner + start + offset;
-                        if (offset !== 0xffffffff && entry + 16 <= typeChunk.end) {
-                            const entrySize = bytes.readUInt16LE(entry);
-                            const flags = bytes.readUInt16LE(entry + 2);
-                            const value = entry + entrySize;
-                            if (!(flags & 1) && value + 8 <= typeChunk.end && bytes.readUInt8(value + 3) === 0x03) {
-                                const label = stringAt(strings, bytes.readUInt32LE(value + 4));
-                                if (label) {
-                                    if (bytes.readUInt16LE(inner + 28) === 0) return label;
-                                    fallback ||= label;
-                                }
-                            }
-                        }
-                    }
-                }
-                inner = typeChunk.end;
-            }
-        }
-        cursor = chunk.end;
-    }
-    return fallback;
-}
-
-function readApkEntries(path) {
+function readApkManifest(path) {
     return new Promise(resolve => {
         yauzl.open(path, { lazyEntries: true }, (error, zip) => {
-            if (error || !zip) return resolve({});
-            const found = {};
+            if (error || !zip) return resolve(null);
+            let manifest = null;
             let done = false;
             const finish = () => {
                 if (done) return;
                 done = true;
                 zip.close();
-                resolve(found);
+                resolve(manifest);
             };
             zip.on('error', finish);
             zip.on('end', finish);
             zip.on('entry', entry => {
-                const limit = entry.fileName === 'AndroidManifest.xml' ? 2 * 1024 * 1024
-                    : entry.fileName === 'resources.arsc' ? 32 * 1024 * 1024 : 0;
+                const limit = entry.fileName === 'AndroidManifest.xml' ? 2 * 1024 * 1024 : 0;
                 if (!limit || entry.uncompressedSize > limit) return zip.readEntry();
                 zip.openReadStream(entry, (streamError, stream) => {
                     if (streamError || !stream) return finish();
@@ -174,8 +115,8 @@ function readApkEntries(path) {
                     });
                     stream.on('error', finish);
                     stream.on('end', () => {
-                        found[entry.fileName] = Buffer.concat(chunks);
-                        zip.readEntry();
+                        manifest = Buffer.concat(chunks);
+                        finish();
                     });
                 });
             });
@@ -185,10 +126,7 @@ function readApkEntries(path) {
 }
 
 export async function readApkAppName(path) {
-    const entries = await readApkEntries(path);
-    const label = appLabelFromManifest(entries['AndroidManifest.xml']);
-    if (typeof label === 'string' && !label.startsWith('@')) return label;
-    return stringFromResources(entries['resources.arsc'], label);
+    return appLabelFromManifest(await readApkManifest(path));
 }
 
 export function androidEnvFromAppName(appName) {
