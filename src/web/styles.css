@@ -2368,3 +2368,42 @@ body {
         display: none;
     }
 }
+
+/* 最新构建：iOS、Android test、Android pre 各占一列。 */
+@media (min-width: 769px) {
+    .latest-card .platforms {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+}
+
+/* 窄屏上让两个 Android 环境依次显示，避免下载操作被挤压。 */
+@media (max-width: 768px) {
+    .latest-card .platform-section + .platform-section {
+        margin-top: var(--spacing-md);
+    }
+}
+
+@media (min-width: 769px) {
+    .all-versions-header,
+    .date-row-content {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+}
+
+#android-pre-section .platform-secondary-actions .qr-toggle-btn,
+#android-pre-section .btn-link {
+    color: #2EBD68;
+}
+
+@media (max-width: 768px) {
+    #android-section .platform-header.desktop-only,
+    #android-pre-section .platform-header.desktop-only {
+        display: flex !important;
+    }
+}
+
+@media (min-width: 769px) {
+    .latest-card .platforms:has(#ios-section[hidden]) {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}

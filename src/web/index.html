@@ -111,11 +111,11 @@
                         </div>
                     </div>
                 </div>
-                <!-- Android -->
+                <!-- Android test -->
                 <div id="android-section" class="platform-section" hidden>
                     <!-- 平台标题（移动端隐藏，因为顶部已有切换） -->
                     <div class="platform-header desktop-only" data-platform="android">
-                        <span class="platform-name">Android</span>
+                        <span class="platform-name">Android · test</span>
                     </div>
                     <div id="android-version-info" class="platform-version-info">
                         <!-- 由 JS 动态填充：与列表项布局一致 -->
@@ -155,6 +155,50 @@
                         </div>
                     </div>
                 </div>
+                <!-- Android pre -->
+                <div id="android-pre-section" class="platform-section" hidden>
+                    <!-- 平台标题（移动端隐藏，因为顶部已有切换） -->
+                    <div class="platform-header desktop-only" data-platform="android">
+                        <span class="platform-name">Android · pre</span>
+                    </div>
+                    <div id="android-pre-version-info" class="platform-version-info">
+                        <!-- 由 JS 动态填充：与列表项布局一致 -->
+                    </div>
+                    <div class="platform-content">
+                        <div class="platform-actions">
+                            <a id="android-pre-download-btn" class="btn btn-primary" href="#" download>
+                                点击下载 APK
+                            </a>
+                        </div>
+                        <!-- 次要操作行：扫码按钮 + 复制链接 + mapping 下载（存在时由 JS 显示） -->
+                        <div class="platform-secondary-actions">
+                            <button class="qr-toggle-btn" data-target="android-pre-qr-content">
+                                <span>扫码下载</span>
+                                <span class="qr-toggle-icon">▼</span>
+                            </button>
+                            <div class="platform-link-actions">
+                                <button id="android-pre-copy-btn" class="btn-link" data-url="">
+                                    复制下载链接
+                                </button>
+                                <a id="android-pre-mapping-btn" class="btn-link" href="#" download hidden>
+                                    下载 mapping
+                                </a>
+                            </div>
+                        </div>
+                        <!-- 二维码内容（独立容器，展开收起不影响上方布局） -->
+                        <div id="android-pre-qr-content" class="qr-content collapsed">
+                            <img id="android-pre-qr" class="qr-code" alt="Android 下载二维码">
+                            <div class="desktop-qr-actions">
+                                <button class="btn-link desktop-copy-btn" data-copy-from="android-pre-copy-btn">
+                                    复制下载链接
+                                </button>
+                                <a id="android-pre-mapping-desktop-btn" class="btn-link" href="#" download hidden>
+                                    下载 mapping
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </section>
 
@@ -180,10 +224,11 @@
                         </select>
                     </div>
                     <div class="column-header-cell android">
-                        <span class="column-title">Android</span>
-                        <select id="android-branch-filter" class="branch-select-mini">
-                            <option value="">全部分支</option>
-                        </select>
+                        <span class="column-title">Android · test</span>
+                        <select id="android-branch-filter" hidden><option value="">全部分支</option></select>
+                    </div>
+                    <div class="column-header-cell android">
+                        <span class="column-title">Android · pre</span>
                     </div>
                 </div>
 
