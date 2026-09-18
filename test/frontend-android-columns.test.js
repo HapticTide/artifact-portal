@@ -58,13 +58,13 @@ test('desktop history groups APK environments independently of branches', () => 
     assert.equal(devRow.children[1].children.length, 3);
 });
 
-test('desktop test column shows all test environment branches while pre stays separate', () => {
+test('desktop test column defaults to all branches and can filter without changing pre column', () => {
     const { portal, rows } = portalWithDocument();
     portal.els = { history: node() };
     portal.detectPlatform = () => 'other';
     portal.formatDateGroupTitle = date => date;
     portal.renderVersionItem = item => ({ buildId: item.id });
-    portal.allBuilds = [build('test', '18'), build('test', '18', 'pre'), build('dev', '17')];
+    portal.allBuilds = [build('test', '18'), build('test', '18', 'pre'), build('dev', '17'), build('pre', '17')];
 
     portal.renderVersionLists();
 
@@ -74,10 +74,24 @@ test('desktop test column shows all test environment branches while pre stays se
         for (const child of item.children || []) visit(child);
     }
     visit(rows);
-    assert.deepEqual(rendered.sort(), ['android_dev_test_17', 'android_test_pre_18', 'android_test_test_18']);
+    assert.deepEqual(rendered.sort(), ['android_dev_test_17', 'android_pre_test_17', 'android_test_pre_18', 'android_test_test_18']);
+
+    portal.androidBranch = 'dev';
+    rows.children = [];
+    portal.renderVersionLists();
+    rendered.length = 0;
+    visit(rows);
+    assert.deepEqual(rendered.sort(), ['android_dev_test_17', 'android_test_pre_18']);
+
+    portal.androidBranch = 'pre';
+    rows.children = [];
+    portal.renderVersionLists();
+    rendered.length = 0;
+    visit(rows);
+    assert.deepEqual(rendered.sort(), ['android_pre_test_17', 'android_test_pre_18']);
 });
 
-test('mobile Android branch selector still includes every Git branch', async () => {
+test('desktop and mobile Android branch selectors include every Git branch', async () => {
     const { portal, context } = portalWithDocument();
     function select() {
         return {
@@ -87,10 +101,12 @@ test('mobile Android branch selector still includes every Git branch', async () 
         };
     }
     const mobile = select();
-    portal.els = { iosBranchFilter: select(), mobileBranchFilter: mobile };
+    const desktop = select();
+    portal.els = { iosBranchFilter: select(), androidBranchFilter: desktop, mobileBranchFilter: mobile };
     portal.mobilePlatform = 'android';
     context.fetch = async () => ({ json: async () => ({ success: true, data: { android: ['test', 'pre', 'dev'] } }) });
     await portal.loadBranches();
+    assert.deepEqual(desktop.options.map(option => option.value), ['', 'test', 'pre', 'dev']);
     assert.deepEqual(mobile.options.map(option => option.value), ['', 'test', 'pre', 'dev']);
 });
 

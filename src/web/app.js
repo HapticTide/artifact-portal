@@ -114,6 +114,7 @@ class ArtifactPortal {
             historyToggle: document.getElementById('history-toggle'),
             iosBranchFilter: document.getElementById('ios-branch-filter'),
             iosEnvFilter: document.getElementById('ios-env-filter'),
+            androidBranchFilter: document.getElementById('android-branch-filter'),
             mobileBranchFilter: document.getElementById('mobile-branch-filter'),
             mobileEnvFilter: document.getElementById('mobile-env-filter'),
             versionRows: document.getElementById('version-rows'),
@@ -144,6 +145,7 @@ class ArtifactPortal {
         // 分支 / 身份筛选状态
         this.iosBranch = '';
         this.iosEnv = '';
+        this.androidBranch = '';
         this.mobileAndroidBranch = '';
 
         // 移动端当前选中的平台（全局）
@@ -346,6 +348,12 @@ class ArtifactPortal {
             this.iosEnv = this.els.iosEnvFilter.value;
             if (this.els.mobileEnvFilter) this.els.mobileEnvFilter.value = this.iosEnv;
             void this.loadBuilds(false);
+        });
+
+        // 桌面端 test 环境构建的 Git 分支筛选
+        this.els.androidBranchFilter?.addEventListener('change', () => {
+            this.androidBranch = this.els.androidBranchFilter.value;
+            this.renderVersionLists();
         });
 
         // 移动端分支筛选
@@ -811,6 +819,7 @@ class ArtifactPortal {
                 // Android 分支
                 const androidBranches = branches.android || branches.all || [];
                 this.androidBranches = androidBranches;
+                this.populateBranchSelect(this.els.androidBranchFilter, androidBranches);
                 if (this.mobilePlatform === 'android') this.updateMobileBranchFilter();
             }
         } catch (err) {
@@ -1045,8 +1054,9 @@ class ArtifactPortal {
                 !this.mobileAndroidBranch || b.platforms.android.branch === this.mobileAndroidBranch);
             this.renderSingleColumnList(builds, this.mobilePlatform);
         } else {
-            // 桌面端：按 APK 包名识别的环境分列。
-            const androidTestBuilds = androidBuilds.filter(b => b.platforms.android.env !== 'pre');
+            // 桌面端：按 APK 包名识别的环境分列，分支筛选只作用于 test 列。
+            const androidTestBuilds = androidBuilds.filter(b => b.platforms.android.env !== 'pre' &&
+                (!this.androidBranch || b.platforms.android.branch === this.androidBranch));
             const androidPreBuilds = androidBuilds.filter(b => b.platforms.android.env === 'pre');
             const allDates = new Set();
             iosBuilds.forEach(b => allDates.add(this.getDateKey(b.time)));
