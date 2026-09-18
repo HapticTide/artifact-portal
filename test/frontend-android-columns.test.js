@@ -26,22 +26,22 @@ function portalWithDocument() {
     return { portal: new context.ArtifactPortal(), rows, context };
 }
 
-function build(branch, day) {
-    const id = `android_${branch}_${day}`;
+function build(branch, day, env = 'test') {
+    const id = `android_${branch}_${env}_${day}`;
     return {
         id, dir: id, time: `2026-09-${day}T10:00:00.000Z`,
-        platforms: { android: { available: true, branch, version: '1.0.0', build: day } },
+        platforms: { android: { available: true, branch, env, version: '1.0.0', build: day } },
     };
 }
 
-test('desktop history groups every non-pre Android branch in the test column', () => {
+test('desktop history groups APK environments independently of branches', () => {
     const { portal, rows } = portalWithDocument();
     const history = node();
     portal.els = { history };
     portal.detectPlatform = () => 'other';
     portal.formatDateGroupTitle = date => date;
     portal.renderVersionItem = item => ({ buildId: item.id });
-    portal.allBuilds = [build('test', '18'), build('pre', '18'), build('dev', '17')];
+    portal.allBuilds = [build('pre', '18', 'test'), build('test', '18', 'pre'), build('dev', '17')];
 
     portal.renderVersionLists();
 
@@ -54,7 +54,7 @@ test('desktop history groups every non-pre Android branch in the test column', (
     assert.deepEqual(rendered.sort(), portal.allBuilds.map(item => item.id).sort());
     assert.equal(rows.children[0].children.length, 2); // dev-only date remains visible
     const devRow = rows.children[0].children[1];
-    assert.equal(devRow.children[1].children[1].children[0].buildId, 'android_dev_17');
+    assert.equal(devRow.children[1].children[1].children[0].buildId, 'android_dev_test_17');
     assert.equal(devRow.children[1].children.length, 3);
 });
 
@@ -65,7 +65,7 @@ test('desktop Android branch selection filters only the test column', () => {
     portal.formatDateGroupTitle = date => date;
     portal.renderVersionItem = item => ({ buildId: item.id });
     portal.androidBranch = 'dev';
-    portal.allBuilds = [build('test', '18'), build('pre', '18'), build('dev', '17')];
+    portal.allBuilds = [build('test', '18'), build('test', '18', 'pre'), build('dev', '17')];
 
     portal.renderVersionLists();
 
@@ -75,10 +75,10 @@ test('desktop Android branch selection filters only the test column', () => {
         for (const child of item.children || []) visit(child);
     }
     visit(rows);
-    assert.deepEqual(rendered.sort(), ['android_dev_17', 'android_pre_18']);
+    assert.deepEqual(rendered.sort(), ['android_dev_test_17', 'android_test_pre_18']);
 });
 
-test('Android mobile branch list includes pre while desktop test list excludes it', async () => {
+test('Android branch selectors include the pre branch because it is independent of APK environment', async () => {
     const { portal, context } = portalWithDocument();
     function select() {
         return {
@@ -93,7 +93,7 @@ test('Android mobile branch list includes pre while desktop test list excludes i
     portal.mobilePlatform = 'android';
     context.fetch = async () => ({ json: async () => ({ success: true, data: { android: ['test', 'pre', 'dev'] } }) });
     await portal.loadBranches();
-    assert.deepEqual(desktop.options.map(option => option.value), ['', 'test', 'dev']);
+    assert.deepEqual(desktop.options.map(option => option.value), ['', 'test', 'pre', 'dev']);
     assert.deepEqual(mobile.options.map(option => option.value), ['', 'test', 'pre', 'dev']);
 });
 

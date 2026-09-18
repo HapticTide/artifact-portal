@@ -63,7 +63,7 @@ db.exec(`
         dir TEXT NOT NULL UNIQUE,           -- 构建目录标识 (如 ios_dev_sandbox_0.7.0_390)
         platform TEXT NOT NULL,             -- 平台 (ios/android)
         branch TEXT NOT NULL,               -- 分支
-        env TEXT NOT NULL DEFAULT 'production', -- iOS 包身份 (pre/production)；android 固定 production
+        env TEXT NOT NULL DEFAULT 'production', -- iOS: pre/production；Android: test/pre
         version TEXT NOT NULL,              -- 版本号
         build TEXT NOT NULL,                -- 构建号
         size INTEGER NOT NULL DEFAULT 0,    -- 包大小 (bytes)
@@ -89,6 +89,14 @@ console.log('[Database] SQLite 数据库已初始化:', DB_PATH);
  * 数据库操作类
  */
 class BuildDatabase {
+    migrateLegacyAndroidBuild({ dir, branch, version, build }) {
+        const legacyDir = `android_${branch}_${version}_${build}`;
+        const legacy = db.prepare('SELECT id FROM builds WHERE dir = ?').get(legacyDir);
+        if (!legacy || db.prepare('SELECT id FROM builds WHERE dir = ?').get(dir)) return;
+        db.prepare(`UPDATE builds SET dir = ?, env = 'pre', updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
+            .run(dir, legacy.id);
+    }
+
     /**
      * 将旧版不带 env 的 iOS dir 原位迁移为当前唯一 ID。
      * 若一次未完成的升级已生成新行，则删除仅用于同一构建的旧重复行，避免历史统计双计。

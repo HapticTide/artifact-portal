@@ -31,6 +31,7 @@ import buildDatabase from './database.js';
 import { readDirSafe, getFileSize, getDiskUsage } from './utils/fs.js';
 import { formatFileSize } from './utils/format.js';
 import { androidMappingCandidates, parseApkFilename, androidVersionDirForApk } from './androidMapping.js';
+import { androidEnvFromPackageName, readApkPackageName } from './androidPackage.js';
 import { buildIosArtifactId, resolveIosEnv } from './upload.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -500,6 +501,8 @@ class ArtifactManager {
 
                     // 查找同名 mapping 文件（android/<branch>/<version>/<apkBase>.mapping.zip）
                     const mapping = this._findAndroidMapping(branch, version, apkFile);
+                    const packageName = await readApkPackageName(apkPath);
+                    const env = androidEnvFromPackageName(packageName);
 
                     builds.push({
                         platform: 'android',
@@ -507,6 +510,8 @@ class ArtifactManager {
                         version: parsed.version,
                         build: parsed.build,
                         appName: parsed.appName,
+                        packageName,
+                        env,
                         filename: apkFile,
                         // 相对路径（用于下载 URL）
                         relativePath: `android/${branch}/${version}/${apkFile}`,
@@ -518,7 +523,7 @@ class ArtifactManager {
                         // 优先使用从文件名解析的时间，否则用文件修改时间
                         time: parsed.time || mtime.toISOString(),
                         // 唯一标识符
-                        id: `android_${branch}_${parsed.version}_${parsed.build}`,
+                        id: `android_${branch}_${parsed.version}_${parsed.build}${env === 'pre' ? '_pre' : ''}`,
                     });
                 }
             }
@@ -595,13 +600,20 @@ class ArtifactManager {
 
         // 收集 Android 构建
         for (const android of this._androidCache) {
-            const dir = `android_${android.branch}_${android.version}_${android.build}`;
+            const dir = android.id;
+            if (android.env === 'pre' && !this._androidCache.some(build =>
+                build.env === 'test' && build.branch === android.branch &&
+                build.version === android.version && build.build === android.build)) {
+                buildDatabase.migrateLegacyAndroidBuild({
+                    dir, branch: android.branch, version: android.version, build: android.build,
+                });
+            }
             existingDirs.add(dir);
             allBuilds.push({
                 dir,
                 platform: 'android',
                 branch: android.branch,
-                env: 'production',
+                env: android.env,
                 version: android.version,
                 build: android.build,
                 size: android.size,
@@ -710,7 +722,7 @@ class ArtifactManager {
     async getLatestByPlatform(options = {}) {
         // env 为空 / null / all：不按身份过滤，取时间上真正最新的包（pre 或 production）
         // env=pre|production：只取该身份下最新
-        const { branch = null, env = null, excludeBranch = null } = options;
+        const { branch = null, env = null, androidEnv = null, excludeBranch = null } = options;
 
         await this._ensureCache();
 
@@ -731,6 +743,9 @@ class ArtifactManager {
         }
         if (excludeBranch) {
             androidBuilds = androidBuilds.filter(b => b.branch !== excludeBranch);
+        }
+        if (androidEnv) {
+            androidBuilds = androidBuilds.filter(b => b.env === androidEnv);
         }
         const latestAndroid = androidBuilds.length > 0 ? this._formatAndroidBuild(androidBuilds[0]) : null;
 
@@ -753,6 +768,9 @@ class ArtifactManager {
         // 查找 Android
         const android = this._androidCache.find(b => b.id === buildId);
         if (android) return this._formatAndroidBuild(android);
+        const legacyAndroid = this._androidCache.find(b =>
+            `android_${b.branch}_${b.version}_${b.build}` === buildId);
+        if (legacyAndroid) return this._formatAndroidBuild(legacyAndroid);
 
         return null;
     }
@@ -884,7 +902,8 @@ class ArtifactManager {
                     version: android.version,
                     build: android.build,
                     branch: android.branch,
-                    packageName: config.androidPackageName || '',
+                    env: android.env,
+                    packageName: android.packageName || '',
                     apk: android.relativePath,
                     // mapping 下载路径（无 mapping 时为 null）
                     mapping: android.mappingPath || null,

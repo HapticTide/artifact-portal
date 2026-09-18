@@ -696,8 +696,8 @@ class ArtifactPortal {
             const [latestRes, buildsRes, testRes, preRes] = await Promise.all([
                 append ? Promise.resolve(null) : fetch(`/api/builds/latest?${latestParams}`),
                 fetch(`/api/builds?${params}`),
-                append ? Promise.resolve(null) : fetch('/api/builds/latest?excludeBranch=pre'),
-                append ? Promise.resolve(null) : fetch('/api/builds/latest?branch=pre'),
+                append ? Promise.resolve(null) : fetch('/api/builds/latest?androidEnv=test'),
+                append ? Promise.resolve(null) : fetch('/api/builds/latest?androidEnv=pre'),
             ]);
 
             // 处理最新构建数据（iOS + Android 分别的最新）
@@ -819,7 +819,7 @@ class ArtifactPortal {
                 // Android 分支
                 const androidBranches = branches.android || branches.all || [];
                 this.androidBranches = androidBranches;
-                this.populateBranchSelect(this.els.androidBranchFilter, androidBranches.filter(branch => branch !== 'pre'));
+                this.populateBranchSelect(this.els.androidBranchFilter, androidBranches);
                 if (this.mobilePlatform === 'android') this.updateMobileBranchFilter();
             }
         } catch (err) {
@@ -1054,10 +1054,10 @@ class ArtifactPortal {
                 !this.mobileAndroidBranch || b.platforms.android.branch === this.mobileAndroidBranch);
             this.renderSingleColumnList(builds, this.mobilePlatform);
         } else {
-            // 桌面端：所有非 pre Android 构建归入 test 列。
-            const androidTestBuilds = androidBuilds.filter(b => b.platforms.android.branch !== 'pre' &&
+            // 桌面端：按 APK 包名识别的环境分列，分支筛选只作用于 test 列。
+            const androidTestBuilds = androidBuilds.filter(b => b.platforms.android.env !== 'pre' &&
                 (!this.androidBranch || b.platforms.android.branch === this.androidBranch));
-            const androidPreBuilds = androidBuilds.filter(b => b.platforms.android.branch === 'pre');
+            const androidPreBuilds = androidBuilds.filter(b => b.platforms.android.env === 'pre');
             const allDates = new Set();
             iosBuilds.forEach(b => allDates.add(this.getDateKey(b.time)));
             androidTestBuilds.forEach(b => allDates.add(this.getDateKey(b.time)));
