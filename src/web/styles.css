@@ -704,6 +704,7 @@ body {
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
+    flex-wrap: wrap;
     gap: var(--spacing-sm);
     margin-bottom: var(--spacing-md);
     padding: var(--spacing-sm) var(--spacing-md);
@@ -715,7 +716,7 @@ body {
 
 /* 复用列表项内部结构样式 */
 .platform-version-info .version-item-info {
-    flex: 1;
+    flex: 1 1 140px;
     min-width: 0;
 }
 
@@ -752,7 +753,12 @@ body {
 }
 
 .platform-version-info .version-item-branch {
-    flex-shrink: 0;
+    flex: 0 1 auto;
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
     font-size: 12px;
     color: var(--subtitle);
     padding: 2px 8px;
