@@ -904,7 +904,7 @@ class ArtifactPortal {
                         </div>
                         <div class="version-item-time">${this.formatTime(iosBuild.time)}</div>
                     </div>
-                    <span class="version-item-branch">${ios.branch || 'dev'}</span>
+                    <span class="version-item-branch" title="${ios.branch || 'dev'}">${ios.branch || 'dev'}</span>
                 `;
             }
 
@@ -963,7 +963,7 @@ class ArtifactPortal {
                     </div>
                     <div class="version-item-time">${this.formatTime(build.time)}</div>
                 </div>
-                <span class="version-item-branch">${android.branch || 'dev'}</span>
+                <span class="version-item-branch" title="${android.branch || 'dev'}">${android.branch || 'dev'}</span>
             `;
         }
         const downloadUrl = `${this.config.publicBaseUrl}/download/${android.apk}`;
